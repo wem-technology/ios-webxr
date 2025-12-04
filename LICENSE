@@ -11,24 +11,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
----------------------------------------
-Third-Party Notices
----------------------------------------
-
-This repository includes third-party code that is licensed separately:
-
-• webxr-ios-js  
-  Licensed under the MPL 2.0  
-  Copyright (c) 2019 Mozilla Inc.
-
-• webxr-polyfill  
-  Licensed under the Apache License 2.0  
-  Copyright (c) 2017 Google
-
-• nosleep.js  
-  Licensed under the MIT License  
-  Copyright (c) 2017 Rich Tibbett
-
-The full license texts for these dependencies can be found in the headers
-of Sources/test/webxr-polyfill.js.
