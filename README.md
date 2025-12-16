@@ -7,3 +7,5 @@ This is a mostly vibe-coded iOS WebXR polyfill app, which builds on Mozilla's AR
 Effectively this works by bridging the native ARKit API over to a mocked WebXR API in a WKWebView. I've tested R3F XR on my iPhone 13 Mini on iOS 18.6.2 and it works.
 
 Built and tested using `xtool`: https://github.com/xtool-org/xtool
+
+Open to PRs and issues
