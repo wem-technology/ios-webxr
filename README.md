@@ -1,6 +1,8 @@
 ### iOS WebXR Polyfill App
 
-![Demo](assets/demo.gif)
+
+<img src="assets/demo.gif" width="250" title="hover text">
+
 
 I was frustrated by Apple's continued (frankly ridiculous) lack of support for mobile WebXR on iOS. Open-source solutions were out-of-date and closed commercial solutions either didn't work or didn't provide the `camera-access` feature.
 
