@@ -57,6 +57,15 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         case "stopAR":
             // JS requested stop
             self.stopSession(notifyJS: false)
+            
+        case "hitTest":
+            // --- FIX: Handle Hit Testing ---
+            if let x = body["x"] as? Double,
+               let y = body["y"] as? Double,
+               let callback = body["callback"] as? String {
+                self.performHitTest(x: x, y: y, callback: callback)
+            }
+            
         default: break
         }
     }
@@ -84,6 +93,43 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         // are completely destroyed, preventing the "frozen frame" issue.
         print("AR Session stopped. Reloading web page to clean state.")
         webView?.reload()
+    }
+    
+    // --- Hit Test Implementation ---
+    func performHitTest(x: Double, y: Double, callback: String) {
+        guard let arView = arView else { return }
+        
+        // Convert normalized coords (0..1) to view coords (pixels)
+        let point = CGPoint(
+            x: CGFloat(x) * arView.bounds.width,
+            y: CGFloat(y) * arView.bounds.height
+        )
+        
+        // Perform ARKit Hit Test (using .estimatedHorizontalPlane or .existingPlane)
+        // Note: raycastQuery is preferred in modern ARKit, but hitTest is simpler to map directly to the polyfill's older structure
+        let types: ARHitTestResult.ResultType = [.existingPlaneUsingExtent, .estimatedHorizontalPlane, .estimatedVerticalPlane]
+        let results = arView.hitTest(point, types: types)
+        
+        var hitsPayload: [[String: Any]] = []
+        
+        for result in results {
+            // Convert transform to array
+            let tf = result.worldTransform
+            let tfArray = toArray(tf)
+            
+            var hitData: [String: Any] = [
+                "world_transform": tfArray
+            ]
+            
+            // If it hit an existing anchor (plane), pass the UUID so the polyfill can map it
+            if let anchor = result.anchor {
+                hitData["uuid"] = anchor.identifier.uuidString
+            }
+            
+            hitsPayload.append(hitData)
+        }
+        
+        replyToJS(callback: callback, data: hitsPayload)
     }
 
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
@@ -195,7 +241,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         guard let webView = webView else { return }
         if let str = data as? String {
             webView.evaluateJavaScript("\(callback)('\(str)')")
-        } else if let dict = data as? [String: Any],
+        } else if let dict = data as? Any, // Can be Dict or Array of Dicts
             let jsonData = try? JSONSerialization.data(withJSONObject: dict),
             let jsonString = String(data: jsonData, encoding: .utf8)
         {

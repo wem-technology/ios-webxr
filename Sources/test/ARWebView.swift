@@ -21,6 +21,9 @@ struct ARWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "initAR")
         contentController.add(context.coordinator, name: "requestSession")
         contentController.add(context.coordinator, name: "stopAR")
+        
+        // --- FIX: Register the hitTest handler ---
+        contentController.add(context.coordinator, name: "hitTest")
 
         // 1. Better Error Handling Injection
         let errorScript = WKUserScript(
