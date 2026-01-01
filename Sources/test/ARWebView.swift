@@ -5,7 +5,6 @@ import WebKit
 
 struct ARWebView: UIViewRepresentable {
     let url: URL
-    // Binding to control visibility of UI based on AR status
     @Binding var isARActive: Bool
 
     func makeUIView(context: Context) -> ARSCNView {
@@ -14,53 +13,71 @@ struct ARWebView: UIViewRepresentable {
 
         let webConfig = WKWebViewConfiguration()
         webConfig.allowsInlineMediaPlayback = true
+        webConfig.mediaTypesRequiringUserActionForPlayback = []
 
         let contentController = webConfig.userContentController
         
-        // Register script message handlers
+        // --- Register Handlers ---
         contentController.add(context.coordinator, name: "initAR")
         contentController.add(context.coordinator, name: "requestSession")
         contentController.add(context.coordinator, name: "stopAR")
-        
-        // --- FIX: Register the hitTest handler ---
         contentController.add(context.coordinator, name: "hitTest")
 
-        // 1. Better Error Handling Injection
-        let errorScript = WKUserScript(
-            source: """
-                    window.onerror = function(message, source, lineno, colno, error) {
-                        window.webkit.messageHandlers.initAR.postMessage({
-                            "callback": "console_error_bridge",
-                            "error_message": message
-                        });
-                    };
-                """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        contentController.addUserScript(errorScript)
+        // =================================================================
+        // INJECTION ORDER IS CRITICAL
+        // All scripts are injected .atDocumentStart to exist before
+        // the page's <head> scripts run.
+        // =================================================================
 
-        // 2. Load Polyfill
-        if let url = Bundle.module.url(forResource: "webxr-polyfill", withExtension: "js"),
-            let polyfillSource = try? String(contentsOf: url)
-        {
-            let userScript = WKUserScript(
-                source: polyfillSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-            contentController.addUserScript(userScript)
+        // --- 3. IWER Core ---
+        // Load from LOCAL bundle. This defines 'IWER', 'XRSystem', etc.
+        if let iwerURL = Bundle.module.url(forResource: "iwer.min", withExtension: "js"), // Ensure file is named iwer.min.js in bundle
+           let iwerSource = try? String(contentsOf: iwerURL) {
+            
+            let iwerScript = WKUserScript(source: iwerSource, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            contentController.addUserScript(iwerScript)
+        } else {
+            print("CRITICAL: iwer.min.js not found in bundle. WebXR will fail.")
         }
-        
-        // 3. Inject Eruda (Mobile Console)
-        // We use .atDocumentEnd to ensure the DOM is ready to append the script tag.
-        let erudaSource = """
-            var script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/eruda';
-            document.body.appendChild(script);
-            script.onload = function () { eruda.init(); }
-        """
-        let erudaScript = WKUserScript(source: erudaSource, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
-        contentController.addUserScript(erudaScript)
 
+        // --- 4. IWER Bridge ---
+        // Defines ARKitIWERDevice and extends IWER.
+        if let bridgeURL = Bundle.module.url(forResource: "iwer-bridge", withExtension: "js"),
+           let bridgeSource = try? String(contentsOf: bridgeURL) {
+            
+            let bridgeScript = WKUserScript(source: bridgeSource, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            contentController.addUserScript(bridgeScript)
+        }
+
+        // --- 5. Install Runtime ---
+        // Actually triggers the polyfill logic.
+        let installSource = """
+            console.log("[Native] Installing IWER Runtime...");
+            try {
+                if (typeof ARKitIWERDevice !== 'undefined') {
+                    const device = new ARKitIWERDevice();
+                    device.installRuntime();
+                    console.log("[Native] Runtime installed successfully.");
+                } else {
+                    console.error("[Native] ARKitIWERDevice not found.");
+                }
+            } catch(e) {
+                console.error("[Native] Installation failed: " + e);
+            }
+        """
+        let installScript = WKUserScript(source: installSource, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        contentController.addUserScript(installScript)
+        
+        // =================================================================
+
+        // --- Setup WebView ---
         let webView = WKWebView(frame: .zero, configuration: webConfig)
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = false
+        // Allow inspecting in Safari (macOS) if you attach the device
+        webView.isInspectable = true 
 
         webView.translatesAutoresizingMaskIntoConstraints = false
         arView.addSubview(webView)
@@ -71,12 +88,14 @@ struct ARWebView: UIViewRepresentable {
             webView.bottomAnchor.constraint(equalTo: arView.bottomAnchor),
         ])
 
-        // Connect the Coordinator to the views
         context.coordinator.webView = webView
         context.coordinator.arView = arView
-
         webView.navigationDelegate = context.coordinator
         arView.session.delegate = context.coordinator
+
+        // --- Load Page ---
+        let request = URLRequest(url: url)
+        webView.load(request)
 
         return arView
     }
@@ -84,12 +103,10 @@ struct ARWebView: UIViewRepresentable {
     func updateUIView(_ uiView: ARSCNView, context: Context) {
         guard let webView = context.coordinator.webView else { return }
         
-        // Load the URL if it differs from the current one or if the webview is empty
         if webView.url?.absoluteString != url.absoluteString {
             webView.load(URLRequest(url: url))
         }
         
-        // If SwiftUI set isARActive to false, but the session is running, force stop it
         if !isARActive && context.coordinator.isSessionRunning {
             context.coordinator.stopSession()
         }
@@ -97,7 +114,6 @@ struct ARWebView: UIViewRepresentable {
 
     func makeCoordinator() -> ARWebCoordinator {
         let coordinator = ARWebCoordinator()
-        // Wire up the callback to update the SwiftUI binding
         coordinator.onSessionActiveChanged = { isActive in
             self.isARActive = isActive
         }

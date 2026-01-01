@@ -21,7 +21,8 @@ let package = Package(
             name: "test",
             resources: [
                 // This tells Swift to bundle this file so it's accessible at runtime
-                .process("webxr-polyfill.js")
+                .process("iwer-bridge.js"),
+                .process("iwer.min.js")
             ]
         )
     ]

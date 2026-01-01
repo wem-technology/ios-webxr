@@ -7,16 +7,15 @@ struct ContentView: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // AR Web View Background (Always present, handles camera)
+            // 1. AR Web View (Background)
             if let targetURL = currentURL {
                 ARWebView(url: targetURL, isARActive: $isARActive)
                     .edgesIgnoringSafeArea(.all)
             }
             
-            // UI Overlay
-            VStack {
-                // 1. Address Bar (Hidden when AR is active)
-                if !isARActive {
+            // 2. Address Bar (Hidden in AR)
+            if !isARActive {
+                VStack {
                     HStack(spacing: 8) {
                         Image(systemName: "globe")
                             .foregroundColor(.secondary)
@@ -44,24 +43,22 @@ struct ContentView: View {
                         }
                     }
                     .padding()
-                    .background(.regularMaterial) // Glassy background
+                    .background(.regularMaterial)
                     .cornerRadius(16)
                     .padding(.horizontal)
-                    // Add top padding to account for safe area (Dynamic Island/Notch)
                     .padding(.top, 50)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .shadow(radius: 5)
+                    
+                    Spacer()
                 }
-                
-                Spacer()
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
             
-            // 2. AR Exit Button (Visible ONLY when AR is active)
+            // 3. Exit AR Button
             if isARActive {
                 VStack {
                     HStack {
                         Button(action: {
-                            // Toggling this to false triggers ARWebView.updateUIView,
-                            // which calls coordinator.stopSession()
                             withAnimation {
                                 isARActive = false
                             }
@@ -75,7 +72,7 @@ struct ContentView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             .background(.thinMaterial)
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
                             .cornerRadius(20)
                             .shadow(radius: 4)
                         }
@@ -89,8 +86,8 @@ struct ContentView: View {
                 .transition(.opacity)
             }
         }
-        .statusBar(hidden: isARActive) // Hide status bar in AR mode
-        .animation(.easeInOut, value: isARActive) // Animate UI changes
+        .statusBar(hidden: isARActive)
+        .animation(.easeInOut, value: isARActive)
     }
     
     private func loadURL() {
@@ -98,15 +95,15 @@ struct ContentView: View {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         
         var cleanString = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Basic convenience: Add https if missing
-        if !cleanString.lowercased().hasPrefix("http") {
-            cleanString = "https://" + cleanString
-            urlString = cleanString // Update UI
-        }
-        
-        if let newURL = URL(string: cleanString) {
-            currentURL = newURL
+        if !cleanString.isEmpty {
+            if !cleanString.lowercased().hasPrefix("http") {
+                cleanString = "https://" + cleanString
+                urlString = cleanString
+            }
+            
+            if let newURL = URL(string: cleanString) {
+                currentURL = newURL
+            }
         }
     }
 }
