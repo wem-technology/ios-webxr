@@ -30,6 +30,9 @@ workflows:
           plutil -replace CFBundleDisplayName -string "$APP_NAME" "$PLIST_PATH"
           plutil -replace CFBundleName -string "$APP_NAME" "$PLIST_PATH"
           
+          # Fix: Add CFBundleIconName explicitly for iOS 11+ compliance
+          plutil -replace CFBundleIconName -string "AppIcon" "$PLIST_PATH"
+          
           cat <<EOF > "$CONFIG_PATH"
           import Foundation
 
@@ -40,12 +43,79 @@ workflows:
           
           echo "Configuration injected: $APP_NAME ($BUNDLE_ID) -> $START_URL"
 
+      - name: Generate App Icons
+        script: |
+          echo "Generating App Icons..."
+          
+          # 1. Check for icon.png, download placeholder if missing
+          ICON_SOURCE="icon.png"
+          if [ ! -f "$ICON_SOURCE" ]; then
+            echo "⚠️ No icon.png found in root! Downloading placeholder..."
+            curl -o "$ICON_SOURCE" https://dummyimage.com/1024x1024/007AFF/ffffff.png&text=XR
+          fi
+
+          # 2. Create Asset Catalog Structure
+          ASSETS_DIR="Sources/xrshell/Assets.xcassets"
+          ICONSET_DIR="$ASSETS_DIR/AppIcon.appiconset"
+          mkdir -p "$ICONSET_DIR"
+
+          # 3. Create Contents.json defining all required sizes
+          cat <<EOF > "$ICONSET_DIR/Contents.json"
+          {
+            "images": [
+              {"size":"20x20","idiom":"iphone","filename":"Icon-20@2x.png","scale":"2x"},
+              {"size":"20x20","idiom":"iphone","filename":"Icon-20@3x.png","scale":"3x"},
+              {"size":"29x29","idiom":"iphone","filename":"Icon-29@2x.png","scale":"2x"},
+              {"size":"29x29","idiom":"iphone","filename":"Icon-29@3x.png","scale":"3x"},
+              {"size":"40x40","idiom":"iphone","filename":"Icon-40@2x.png","scale":"2x"},
+              {"size":"40x40","idiom":"iphone","filename":"Icon-40@3x.png","scale":"3x"},
+              {"size":"60x60","idiom":"iphone","filename":"Icon-60@2x.png","scale":"2x"},
+              {"size":"60x60","idiom":"iphone","filename":"Icon-60@3x.png","scale":"3x"},
+              {"size":"20x20","idiom":"ipad","filename":"Icon-20.png","scale":"1x"},
+              {"size":"20x20","idiom":"ipad","filename":"Icon-20@2x.png","scale":"2x"},
+              {"size":"29x29","idiom":"ipad","filename":"Icon-29.png","scale":"1x"},
+              {"size":"29x29","idiom":"ipad","filename":"Icon-29@2x.png","scale":"2x"},
+              {"size":"40x40","idiom":"ipad","filename":"Icon-40.png","scale":"1x"},
+              {"size":"40x40","idiom":"ipad","filename":"Icon-40@2x.png","scale":"2x"},
+              {"size":"76x76","idiom":"ipad","filename":"Icon-76.png","scale":"1x"},
+              {"size":"76x76","idiom":"ipad","filename":"Icon-76@2x.png","scale":"2x"},
+              {"size":"83.5x83.5","idiom":"ipad","filename":"Icon-83.5@2x.png","scale":"2x"},
+              {"size":"1024x1024","idiom":"ios-marketing","filename":"Icon-1024.png","scale":"1x"}
+            ],
+            "info": { "version": 1, "author": "xcode" }
+          }
+          EOF
+
+          # 4. Resize images using sips (built-in macOS tool)
+          function resize() {
+            sips -z $1 $1 "$ICON_SOURCE" --out "$ICONSET_DIR/$2" > /dev/null
+          }
+
+          resize 40 "Icon-20@2x.png"
+          resize 60 "Icon-20@3x.png"
+          resize 58 "Icon-29@2x.png"
+          resize 87 "Icon-29@3x.png"
+          resize 80 "Icon-40@2x.png"
+          resize 120 "Icon-40@3x.png"
+          resize 120 "Icon-60@2x.png"
+          resize 180 "Icon-60@3x.png"
+          resize 20 "Icon-20.png"
+          resize 29 "Icon-29.png"
+          resize 40 "Icon-40.png"
+          resize 76 "Icon-76.png"
+          resize 152 "Icon-76@2x.png"
+          resize 167 "Icon-83.5@2x.png"
+          resize 1024 "Icon-1024.png"
+
+          echo "✅ Icons generated successfully in $ICONSET_DIR"
+
       - name: Generate Xcode Project (XcodeGen)
         script: |
           # 1. Install XcodeGen
           brew install xcodegen
 
           # 2. Create a project.yml definition for XcodeGen
+          # Added ASSETCATALOG_COMPILER_APPICON_NAME to link the icons
           cat <<EOF > project.yml
           name: xrshell
           options:
@@ -66,6 +136,7 @@ workflows:
                 MARKETING_VERSION: 1.0.0
                 SWIFT_VERSION: 5.0
                 RECOMMENDED_ASSET_TYPES: "appicon"
+                ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
           EOF
           
           # 3. Run XcodeGen to create xrshell.xcodeproj
