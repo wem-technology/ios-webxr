@@ -3,11 +3,12 @@ workflows:
     name: iOS xtool deployment
     max_build_duration: 120
     instance_type: mac_mini_m2
-    
+
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.wem.xrshell
+      groups:
+        - Wem # Ensure CERTIFICATE_PRIVATE_KEY is in this group
+      integrations:
+        app_store_connect: Codemagic # Verify this matches the Name you gave the key in Codemagic UI
       vars:
         APP_NAME: "WebXR Shell"
         BUNDLE_ID: "com.wem.xrshell"
@@ -25,7 +26,6 @@ workflows:
           CONFIG_PATH="Sources/xrshell/AppConfig.swift"
 
           plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$PLIST_PATH"
-          
           plutil -replace CFBundleDisplayName -string "$APP_NAME" "$PLIST_PATH"
           plutil -replace CFBundleName -string "$APP_NAME" "$PLIST_PATH"
           
@@ -60,8 +60,24 @@ workflows:
             project.save
           '
 
-      - name: Set up provisioning profiles
+      # --- AUTOMATIC CODE SIGNING START ---
+      - name: Initialize Keychain
+        script: keychain initialize
+
+      - name: Fetch Signing Files
+        script: |
+          # This command uses the API Key and CERTIFICATE_PRIVATE_KEY to 
+          # generate a certificate and profile if they don't exist.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Add Certificates to Keychain
+        script: keychain add-certificates
+
+      - name: Apply Provisioning Profiles
         script: xcode-project use-profiles --project "xrshell.xcodeproj"
+      # --- AUTOMATIC CODE SIGNING END ---
 
       - name: Build IPA
         script: |
@@ -81,6 +97,4 @@ workflows:
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
-        submit_to_app_store: false 
-        # Set to true if you want to submit directly to review, 
-        # usually you want to test in TestFlight first.
+        submit_to_app_store: false
