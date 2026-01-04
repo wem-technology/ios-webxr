@@ -4,11 +4,12 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
 
+    integrations:
+      app_store_connect: Codemagic
+
     environment:
       groups:
-        - Wem # Ensure CERTIFICATE_PRIVATE_KEY is in this group
-      integrations:
-        app_store_connect: Codemagic # Verify this matches the Name you gave the key in Codemagic UI
+        - Wem
       vars:
         APP_NAME: "WebXR Shell"
         BUNDLE_ID: "com.wem.xrshell"
