@@ -92,8 +92,7 @@ workflows:
         script: |
           xcode-project build-ipa \
             --project "xrshell.xcodeproj" \
-            --scheme "$XCODE_SCHEME" \
-            --configuration Release
+            --scheme "$XCODE_SCHEME"
 
     artifacts:
       - build/ios/ipa/*.ipa
