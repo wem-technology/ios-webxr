@@ -1,19 +1,18 @@
 workflows:
   ios-xtool-deploy:
-    name: iOS xtool Deployment
+    name: iOS xtool deployment
     max_build_duration: 120
     instance_type: mac_mini_m2
     
     environment:
       ios_signing:
-        distribution_type: app_store # or ad_hoc
-        bundle_identifier: com.example.custom_id
+        distribution_type: app_store
+        bundle_identifier: com.wem.xrshell
       vars:
-        # Define defaults here, or override them in the Codemagic UI
-        APP_NAME: "My AR App"
-        BUNDLE_ID: "com.example.test"
+        APP_NAME: "WebXR Shell"
+        BUNDLE_ID: "com.wem.xrshell"
         START_URL: "https://threejs.org/examples/webxr_ar_hittest.html"
-        XCODE_SCHEME: "test" # Must match the name of target in Package.swift
+        XCODE_SCHEME: "xrshell"
       xcode: latest
       cocoapods: default
 
@@ -22,8 +21,8 @@ workflows:
         script: |
           echo "Injecting configuration..."
           
-          PLIST_PATH="Sources/test/Info.plist"
-          CONFIG_PATH="Sources/test/AppConfig.swift"
+          PLIST_PATH="Info.plist"
+          CONFIG_PATH="Sources/xrshell/AppConfig.swift"
 
           plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$PLIST_PATH"
           
@@ -46,8 +45,8 @@ workflows:
           
           ruby -e '
             require "xcodeproj"
-            project_path = "test.xcodeproj"
-            plist_path = "Sources/test/Info.plist"
+            project_path = "xrshell.xcodeproj"
+            plist_path = "Info.plist"
             project = Xcodeproj::Project.open(project_path)
             project.targets.each do |target|
               target.build_configurations.each do |config|
@@ -62,12 +61,12 @@ workflows:
           '
 
       - name: Set up provisioning profiles
-        script: xcode-project use-profiles --project test.xcodeproj
+        script: xcode-project use-profiles --project "xrshell.xcodeproj"
 
       - name: Build IPA
         script: |
           xcode-project build-ipa \
-            --project "test.xcodeproj" \
+            --project "xrshell.xcodeproj" \
             --scheme "$XCODE_SCHEME" \
             --configuration Release
 
@@ -75,3 +74,13 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false 
+        # Set to true if you want to submit directly to review, 
+        # usually you want to test in TestFlight first.

@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>test</string>
+	<string>xrshell</string>
 	<key>CFBundleExecutable</key>
-	<string>test</string>
+	<string>xrshell</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.example.test</string>
+	<string>com.wem.xrshell</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>test</string>
+	<string>xrshell</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

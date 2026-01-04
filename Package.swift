@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "test",
+    name: "xrshell",
     platforms: [
         .iOS(.v17),
         .macOS(.v14),
@@ -12,13 +12,13 @@ let package = Package(
         // An xtool project should contain exactly one library product,
         // representing the main app.
         .library(
-            name: "test",
-            targets: ["test"]
+            name: "xrshell",
+            targets: ["xrshell"]
         )
     ],
     targets: [
         .target(
-            name: "test",
+            name: "xrshell",
             resources: [
                 // This tells Swift to bundle this file so it's accessible at runtime
                 .process("webxr-polyfill.js")
