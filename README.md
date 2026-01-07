@@ -35,7 +35,7 @@ The application functions as a bridge between Swift (ARKit) and JavaScript (WebG
 ### Building
 
 1.  Clone the repository.
-3.  Build and test on a connected device using `xtool dev` [xtool](https://github.com/xtool-org/xtool).
+2.  Build and test on a connected device using `xtool dev` [xtool](https://github.com/xtool-org/xtool).
 
 ## Usage
 
@@ -53,3 +53,7 @@ The application functions as a bridge between Swift (ARKit) and JavaScript (WebG
 ## Contributing
 
 Pull requests and issue reporting are welcome. This project is intended as a starting point for developers requiring WebXR capabilities on iOS today.
+
+## Used By
+
+[Brrrowser](https://apps.apple.com/us/app/brrrowser/id6747417026)
