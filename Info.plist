@@ -8,6 +8,8 @@
 	<string>xrshell</string>
 	<key>CFBundleExecutable</key>
 	<string>xrshell</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.wem.xrshell</string>
 	<key>CFBundleInfoDictionaryVersion</key>
