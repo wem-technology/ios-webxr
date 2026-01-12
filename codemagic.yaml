@@ -73,8 +73,7 @@ workflows:
           EOF
 
           function resize() {
-            # Strip alpha to fix transparency error
-            sips -z $1 $1 -s format png -s hasAlpha false "$ICON_SOURCE" --out "$ICONSET_DIR/$2" > /dev/null
+            sips -z $1 $1 -s format png "$ICON_SOURCE" --out "$ICONSET_DIR/$2" > /dev/null
           }
 
           resize 40 "Icon-20@2x.png"
