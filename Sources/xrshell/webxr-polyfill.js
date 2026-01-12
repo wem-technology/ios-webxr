@@ -4924,6 +4924,7 @@ host this content on a secure origin for the best user experience.
         constructor(global) {
             super(global);
             this._throttledLogPose = throttle(this.logPose, 1000);
+            this.environmentBlendMode = 'alpha-blend';
             this._sessions = new Map();
             this._activeSession = null;
             this._frameSession = null;
