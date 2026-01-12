@@ -14,10 +14,10 @@ targets:
       # 1. Point to your static file
       INFOPLIST_FILE: Info.plist
       
-      # 2. CRITICAL: Tell Xcode to merge build settings into the plist
-      GENERATE_INFOPLIST_FILE: YES
+      # 2. CRITICAL CHANGE: Turn this OFF to prevent Xcode from stripping keys
+      GENERATE_INFOPLIST_FILE: NO
       
-      # 3. Define the icon name here. Xcode will now inject this into the generated plist.
+      # 3. This setting is still good to have, but the plist key is now the authority
       ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
       RECOMMENDED_ASSET_TYPES: "appicon"
 
