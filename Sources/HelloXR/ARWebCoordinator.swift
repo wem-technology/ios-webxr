@@ -14,7 +14,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     
     var onNavigationChanged: (() -> Void)?
 
-
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         onNavigationChanged?()
     }
@@ -34,9 +33,12 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     // Cache the sRGB color space
     let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 
-    // Throttling for image sending to maintain FPS
+    // Performance Control
     var frameCounter = 0
-    let frameSkip = 15
+    // Target ~10 FPS for video sending (Assuming 60FPS native)
+    let videoFrameSkip = 6
+    // Max dimension for the video frame sent to JS (drastically reduces Base64 size)
+    let maxVideoDimension: CGFloat = 480.0
     
     // --- WKScriptMessageHandler ---
     
@@ -162,9 +164,8 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                 let callbackName = self.dataCallbackName
             else { return }
 
-            // Throttle image processing
             frameCounter += 1
-            if frameCounter % 2 != 0 { return }
+            let shouldSendVideo = (frameCounter % videoFrameSkip == 0)
 
             let orientation: UIInterfaceOrientation = .portrait
             let viewportSize = webView.bounds.size
@@ -178,14 +179,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                 zFar: 1000
             )
 
-            // ARKit buffers are usually landscape. Since we rotate to .right (Portrait),
-            // we must swap width and height for the JS payload.
-            let rawWidth = CVPixelBufferGetWidth(frame.capturedImage)
-            let rawHeight = CVPixelBufferGetHeight(frame.capturedImage)
-
-            let finalWidth = rawHeight
-            let finalHeight = rawWidth
-
             var jsCommand = "if(!window.NativeARData){window.NativeARData={};}"
             
             // 1. Direct assignments
@@ -193,17 +186,38 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             jsCommand += "window.NativeARData.light_intensity = \(frame.lightEstimate?.ambientIntensity ?? 1000);"
             jsCommand += "window.NativeARData.worldMappingStatus = 'ar_worldmapping_not_available';"
             
-            // 2. Matrix Arrays
+            // 2. Matrix Arrays (Send Every Frame - 60FPS)
             jsCommand += "window.NativeARData.camera_transform = \(fastFloatArrayToString(cameraTransform));"
             jsCommand += "window.NativeARData.camera_view = \(fastFloatArrayToString(viewMatrix));"
             jsCommand += "window.NativeARData.projection_camera = \(fastFloatArrayToString(projMatrix));"
 
-            // 3. Native Video
-            let pixelBuffer = frame.capturedImage
-            if let base64String = convertPixelBufferToBase64(pixelBuffer, quality: 0.6) {
-                jsCommand += "window.NativeARData.video_data = '\(base64String)';"
-                jsCommand += "window.NativeARData.video_width = \(finalWidth);"
-                jsCommand += "window.NativeARData.video_height = \(finalHeight);"
+            // 3. Native Video (Send Throttled - ~10FPS)
+            // ARKit buffers are usually landscape. Since we rotate to .right (Portrait),
+            // we must swap width and height for the JS payload.
+            let rawWidth = CVPixelBufferGetWidth(frame.capturedImage)
+            let rawHeight = CVPixelBufferGetHeight(frame.capturedImage)
+            
+            // In portrait (orientation .right), these flip
+            let finalWidth = rawHeight
+            let finalHeight = rawWidth
+            
+            if shouldSendVideo {
+                let pixelBuffer = frame.capturedImage
+                // We pass a scaling factor to reduce resolution and speed up Base64 encoding
+                // Calculate scale to fit within maxVideoDimension
+                let maxDim = max(CGFloat(finalWidth), CGFloat(finalHeight))
+                let scale = maxDim > maxVideoDimension ? (maxVideoDimension / maxDim) : 1.0
+
+                if let base64String = convertPixelBufferToBase64(pixelBuffer, scale: scale, quality: 0.5) {
+                    jsCommand += "window.NativeARData.video_data = '\(base64String)';"
+                    // We report the *original* aspect ratio dimensions to JS so texture mapping stays correct,
+                    // even though the physical pixel data is smaller.
+                    jsCommand += "window.NativeARData.video_width = \(finalWidth);"
+                    jsCommand += "window.NativeARData.video_height = \(finalHeight);"
+                    jsCommand += "window.NativeARData.video_updated = true;"
+                }
+            } else {
+                 jsCommand += "window.NativeARData.video_updated = false;"
             }
 
             // 4. Execute callback
@@ -215,11 +229,18 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
     // --- Helpers ---
 
-    private func convertPixelBufferToBase64(_ pixelBuffer: CVPixelBuffer, quality: CGFloat)
+    private func convertPixelBufferToBase64(_ pixelBuffer: CVPixelBuffer, scale: CGFloat, quality: CGFloat)
         -> String?
     {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        // Downscale if necessary
+        if scale < 1.0 {
+            let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
+            ciImage = ciImage.transformed(by: scaleTransform)
+        }
 
+        // Render to CGImage first
         guard
             let cgImage = ciContext.createCGImage(
                 ciImage, from: ciImage.extent, format: .RGBA8, colorSpace: sRGBColorSpace)
@@ -227,6 +248,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             return nil
         }
 
+        // Orientation .right handles the rotation from ARKit camera sensor (landscape) to UI (Portrait)
         let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
 
         guard let jpegData = uiImage.jpegData(compressionQuality: quality) else { return nil }

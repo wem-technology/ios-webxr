@@ -4290,20 +4290,19 @@ host this content on a secure origin for the best user experience.
         _onData(data) {
             // Swift now populates window.NativeARData directly before calling this.
             const nativeData = window.NativeARData;
-
-            // Fallback for legacy support if 'data' is still passed
             const sourceData = nativeData || data;
-
             this._rawARData = sourceData;
 
-            if (sourceData.video_data) {
-                // If using ARKitDevice, inject this data into it
+            // Only update the video texture if the native side says it's new.
+            // This prevents re-assigning the same src or empty data when throttled.
+            if (sourceData.video_updated && sourceData.video_data) {
                 if (ARKitWrapper.GLOBAL_INSTANCE && ARKitWrapper.GLOBAL_INSTANCE._deviceRef) {
                     const dev = ARKitWrapper.GLOBAL_INSTANCE._deviceRef;
                     dev._cameraMetadata.width = sourceData.video_width || 0;
                     dev._cameraMetadata.height = sourceData.video_height || 0;
 
-                    // Directly assign the base64 string
+                    // Assigning src triggers the onload/decoding. 
+                    // We only want to do this at 10fps, not 60fps.
                     dev._cameraImage.src = "data:image/jpeg;base64," + sourceData.video_data;
                 }
             }
