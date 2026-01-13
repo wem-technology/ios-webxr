@@ -4,25 +4,27 @@ import SceneKit
 import WebKit
 
 @MainActor
-class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScriptMessageHandler {
+public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScriptMessageHandler {
     weak var webView: WKWebView?
     weak var arView: ARSCNView?
     var dataCallbackName: String?
     var isSessionRunning = false
 
+    // Internal properties are visible to ARWebView within the same module
     var onSessionActiveChanged: ((Bool) -> Void)?
-    
     var onNavigationChanged: (() -> Void)?
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    // MARK: - WKNavigationDelegate
+    
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         onNavigationChanged?()
     }
     
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         onNavigationChanged?()
     }
     
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         onNavigationChanged?()
     }
 
@@ -42,7 +44,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     
     // --- WKScriptMessageHandler ---
     
-    func userContentController(
+    public func userContentController(
         _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
     ) {
         guard let body = message.body as? [String: Any] else { return }
@@ -157,7 +159,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
     // --- ARSessionDelegate ---
 
-    nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+    nonisolated public func session(_ session: ARSession, didUpdate frame: ARFrame) {
         MainActor.assumeIsolated {
             guard isSessionRunning,
                 let webView = self.webView,

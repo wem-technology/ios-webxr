@@ -4,6 +4,12 @@ options:
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "15.0"
+
+# 1. Define the Local Package
+packages:
+  WebXREngine:
+    path: WebXREngine
+
 targets:
   HelloXR:
     type: application
@@ -13,8 +19,10 @@ targets:
     dependencies:
       - target: HelloXRClip
         embed: true
+      # 2. Link the Package Product to the App
+      - package: WebXREngine
+        product: WebXREngine
     settings:
-      # Points to the Main App Plist
       INFOPLIST_FILE: Info.plist
       GENERATE_INFOPLIST_FILE: NO
       PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID}
@@ -29,8 +37,11 @@ targets:
     platform: iOS
     sources:
       - path: Sources/HelloXR
+    dependencies:
+      # 3. Link the Package Product to the App Clip too
+      - package: WebXREngine
+        product: WebXREngine
     settings:
-      # Points to the App Clip Plist
       INFOPLIST_FILE: Info-Clip.plist
       GENERATE_INFOPLIST_FILE: NO
       PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID}.Clip

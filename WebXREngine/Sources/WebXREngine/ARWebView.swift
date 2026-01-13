@@ -3,34 +3,31 @@ import ARKit
 import SceneKit
 import WebKit
 
-// Enum to control WebView actions from SwiftUI
-enum WebViewNavigationAction: Equatable {
-    case idle
-    case load(URL)
-    case goBack
-    case goForward
-    case reload
-}
-
-struct ARWebView: UIViewRepresentable {
-    // Control bindings
-    @Binding var action: WebViewNavigationAction
-    @Binding var isARActive: Bool
+public struct ARWebView: UIViewRepresentable {
+    // Make bindings public
+    @Binding public var action: WebViewNavigationAction
+    @Binding public var isARActive: Bool
     
-    // State reporting bindings
-    @Binding var currentURLString: String
-    @Binding var canGoBack: Bool
-    @Binding var canGoForward: Bool
+    @Binding public var currentURLString: String
+    @Binding public var canGoBack: Bool
+    @Binding public var canGoForward: Bool
 
-    private var resourceBundle: Bundle {
-        #if SWIFT_PACKAGE
-        return Bundle.module
-        #else
-        return Bundle.main
-        #endif
+    // Public Initializer
+    public init(
+        action: Binding<WebViewNavigationAction>,
+        isARActive: Binding<Bool>,
+        currentURLString: Binding<String>,
+        canGoBack: Binding<Bool>,
+        canGoForward: Binding<Bool>
+    ) {
+        self._action = action
+        self._isARActive = isARActive
+        self._currentURLString = currentURLString
+        self._canGoBack = canGoBack
+        self._canGoForward = canGoForward
     }
 
-    func makeUIView(context: Context) -> UIView {
+    public func makeUIView(context: Context) -> UIView {
         let containerView = UIView()
         containerView.backgroundColor = .systemBackground
         
@@ -44,7 +41,6 @@ struct ARWebView: UIViewRepresentable {
         webConfig.allowsInlineMediaPlayback = true
         let contentController = webConfig.userContentController
         
-        // Register handlers
         contentController.add(context.coordinator, name: "initAR")
         contentController.add(context.coordinator, name: "requestSession")
         contentController.add(context.coordinator, name: "stopAR")
@@ -61,43 +57,40 @@ struct ARWebView: UIViewRepresentable {
                 """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(errorScript)
 
-        if let url = resourceBundle.url(forResource: "webxr-polyfill", withExtension: "js"),
+        // --- CRITICAL CHANGE: Use Bundle.module for Swift Packages ---
+        if let url = Bundle.module.url(forResource: "webxr-polyfill", withExtension: "js"),
            let polyfillSource = try? String(contentsOf: url)
         {
             let userScript = WKUserScript(
                 source: polyfillSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
             contentController.addUserScript(userScript)
+        } else {
+            print("CRITICAL ERROR: Could not load webxr-polyfill.js from Package Bundle")
         }
         
         let webView = WKWebView(frame: .zero, configuration: webConfig)
         if #available(iOS 16.4, *) { webView.isInspectable = true }
         
-        // Default state: Opaque (Normal Browsing)
         webView.isOpaque = true
         webView.backgroundColor = .systemBackground
         webView.scrollView.backgroundColor = .systemBackground
         webView.translatesAutoresizingMaskIntoConstraints = false
 
-        // 3. Assemble View Hierarchy
-        // Container -> ARView (Back) -> WebView (Front)
         containerView.addSubview(arView)
         containerView.addSubview(webView)
         
         NSLayoutConstraint.activate([
-            // AR View Full Fill
             arView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
             arView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
             arView.topAnchor.constraint(equalTo: containerView.topAnchor),
             arView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
             
-            // Web View Full Fill
             webView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
             webView.topAnchor.constraint(equalTo: containerView.topAnchor),
             webView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
         ])
 
-        // 4. Hook up Coordinator
         context.coordinator.webView = webView
         context.coordinator.arView = arView
         webView.navigationDelegate = context.coordinator
@@ -106,25 +99,22 @@ struct ARWebView: UIViewRepresentable {
         return containerView
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    public func updateUIView(_ uiView: UIView, context: Context) {
         guard let webView = context.coordinator.webView,
               let arView = context.coordinator.arView else { return }
         
         if isARActive {
-            // AR Mode: Show AR View, Make Web Transparent
             arView.isHidden = false
             webView.isOpaque = false
             webView.backgroundColor = .clear
             webView.scrollView.backgroundColor = .clear
         } else {
-            // Browse Mode: Hide AR View (Kills the ghost frame), Make Web Opaque
             arView.isHidden = true
             webView.isOpaque = true
             webView.backgroundColor = .systemBackground
             webView.scrollView.backgroundColor = .systemBackground
         }
         
-        // Handle Navigation Actions
         switch action {
         case .idle:
             break
@@ -142,13 +132,12 @@ struct ARWebView: UIViewRepresentable {
             DispatchQueue.main.async { self.action = .idle }
         }
         
-        // Safety check
         if !isARActive && context.coordinator.isSessionRunning {
             context.coordinator.stopSession()
         }
     }
 
-    func makeCoordinator() -> ARWebCoordinator {
+    public func makeCoordinator() -> ARWebCoordinator {
         let coordinator = ARWebCoordinator()
         
         coordinator.onSessionActiveChanged = { isActive in

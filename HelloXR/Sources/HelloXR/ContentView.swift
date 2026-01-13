@@ -1,4 +1,5 @@
 import SwiftUI
+import WebXREngine // <--- IMPORT ADDED
 
 struct ContentView: View {
 
@@ -20,7 +21,6 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             
             // 1. Background Color
-            // This color will show in the Safe Zones when AR is active
             safeAreaColor
                 .edgesIgnoringSafeArea(.all)
             
@@ -34,10 +34,8 @@ struct ContentView: View {
                     canGoBack: $canGoBack,
                     canGoForward: $canGoForward
                 )
-                // --- FIX 2: Conditional Safe Area ---
-                // If AR is active: Respect Safe Area (shows background color in bars).
-                // If AR is inactive: Ignore Safe Area (full screen web browsing).
-                .edgesIgnoringSafeArea(isARActive ? [] : .all)
+                // --- FIX: Explicitly type Edge.Set() to resolve compiler ambiguity ---
+                .edgesIgnoringSafeArea(isARActive ? Edge.Set() : .all)
                 
                 // 3. UI Overlay (Address Bar)
                 VStack {
@@ -68,7 +66,6 @@ struct ContentView: View {
     }
     
     // MARK: - Subviews
-    // (Rest of the file remains the same)
     
     var controlBar: some View {
         HStack(spacing: 8) {
