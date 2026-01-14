@@ -8564,6 +8564,10 @@ window.iwer = {
 
     const { XRDevice } = window.iwer;
 
+    // --- Configuration ---
+    // Offset ARKit (0,0,0) to eye-level so y=0 acts as the floor in Three.js
+    const USER_HEIGHT = 1.6;
+
     // --- Math Helpers ---
 
     function decomposeMatrix(m) {
@@ -8663,6 +8667,8 @@ window.iwer = {
     }
 
     // Create a Quaternion looking in 'direction'
+    // This creates a rotation where the object's Z axis faces -direction
+    // (Three.js objects look down -Z, so this aligns object -Z to direction)
     function quatLookAt(direction, up) {
         let z = { x: -direction.x, y: -direction.y, z: -direction.z };
         let len = Math.sqrt(z.x * z.x + z.y * z.y + z.z * z.z);
@@ -8762,13 +8768,13 @@ window.iwer = {
         if (e.touches && e.touches.length > 0) {
             touchState.x = e.touches[0].clientX;
             touchState.y = e.touches[0].clientY;
-        } else if (isActive === false) {
-            // Keep last x/y on release so we don't snap back to 0,0
         }
 
         // Pass trigger state to IWER controller
+        // We use the Right controller to represent the primary touch interaction
         if (device && device.controllers && device.controllers.right) {
             const val = isActive ? 1.0 : 0.0;
+            // The HTML example uses 'selectstart' which triggers on button value change
             device.controllers.right.updateButtonValue('trigger', val);
             device.controllers.right.updateButtonTouch('trigger', isActive);
         }
@@ -8783,7 +8789,8 @@ window.iwer = {
     // Cached Arrays to avoid garbage collection
     const invProj = new Float32Array(16);
     const clipVec = new Float32Array(4);
-    const worldVec = new Float32Array(4);
+    const viewVec = new Float32Array(4);
+    const worldDirVec = new Float32Array(4);
 
     function arKitDriverLoop() {
         requestAnimationFrame(arKitDriverLoop);
@@ -8800,7 +8807,9 @@ window.iwer = {
             if (pose) {
                 camPos = pose.position;
                 camQuat = pose.quaternion;
-                device.position.set(camPos.x, camPos.y, camPos.z);
+
+                // FIX: Apply Height Offset to Camera so y=0 looks like floor
+                device.position.set(camPos.x, camPos.y + USER_HEIGHT, camPos.z);
                 device.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
@@ -8814,52 +8823,60 @@ window.iwer = {
 
         // 3. Update Controller (Raycaster)
         if (device.controllers && device.controllers.right) {
-            // Controller origin matches Camera origin
-            device.controllers.right.position.set(camPos.x, camPos.y, camPos.z);
+            // Controller origin matches Camera origin + Height
+            device.controllers.right.position.set(camPos.x, camPos.y + USER_HEIGHT, camPos.z);
+            device.controllers.right.connected = true;
 
             if (touchState.active && proj && camMat) {
-                // --- FULL UNPROJECTION (Screen -> NDC -> View -> World) ---
+                // --- FULL UNPROJECTION (Screen -> Ray Direction) ---
 
                 // A. Convert Screen to Normalized Device Coordinates (NDC)
                 // X: -1 (left) to 1 (right)
-                // Y: +1 (top) to -1 (bottom)  <-- WebGL convention
+                // Y: +1 (top) to -1 (bottom) in WebGL
                 const ndcX = (touchState.x / window.innerWidth) * 2 - 1;
                 const ndcY = 1 - (touchState.y / window.innerHeight) * 2;
 
-                // B. Create Clip Vector at Near Plane (z = -1)
-                clipVec[0] = ndcX;
-                clipVec[1] = ndcY;
-                clipVec[2] = -1.0;
-                clipVec[3] = 1.0;
-
-                // C. Inverse Projection Matrix
+                // B. Inverse Projection Matrix to get View Space coordinates
                 if (invertMatrix(invProj, proj)) {
-                    // D. Unproject to Camera View Space (InvProj * Clip)
-                    transformVec4(worldVec, clipVec, invProj);
+                    // Pick a point on the far plane/frustum in Clip Space
+                    // z = 0.5 (normalized depth)
+                    clipVec[0] = ndcX;
+                    clipVec[1] = ndcY;
+                    clipVec[2] = 0.5;
+                    clipVec[3] = 1.0;
 
-                    // Perspective divide (though w is likely 1 here for simple unprojection)
-                    if (worldVec[3] !== 0) {
-                        worldVec[0] /= worldVec[3];
-                        worldVec[1] /= worldVec[3];
-                        worldVec[2] /= worldVec[3];
+                    // C. Unproject to Camera View Space
+                    transformVec4(viewVec, clipVec, invProj);
+
+                    if (viewVec[3] !== 0) {
+                        viewVec[0] /= viewVec[3];
+                        viewVec[1] /= viewVec[3];
+                        viewVec[2] /= viewVec[3];
                     }
-                    // We only need direction, so set w=0 for rotation-only transform
-                    worldVec[3] = 0.0;
 
-                    // E. Transform to World Space (CamMat * ViewVec)
-                    // Note: 'camera_transform' IS the Camera->World matrix
-                    transformVec4(worldVec, worldVec, camMat);
-
-                    // F. Normalize Direction
-                    const len = Math.sqrt(worldVec[0] * worldVec[0] + worldVec[1] * worldVec[1] + worldVec[2] * worldVec[2]);
-                    const dir = {
-                        x: worldVec[0] / len,
-                        y: worldVec[1] / len,
-                        z: worldVec[2] / len
+                    // D. Calculate Direction (View Space)
+                    // Since origin is (0,0,0) in View Space, the vector IS the point
+                    const len = Math.sqrt(viewVec[0] * viewVec[0] + viewVec[1] * viewVec[1] + viewVec[2] * viewVec[2]);
+                    const dirView = {
+                        x: viewVec[0] / len,
+                        y: viewVec[1] / len,
+                        z: viewVec[2] / len
                     };
 
-                    // G. Orient Controller
-                    const ctrlQuat = quatLookAt(dir, { x: 0, y: 1, z: 0 });
+                    // E. Transform Direction to World Space (Rotate only)
+                    // Treat as vector (w=0)
+                    const dirClip = [dirView.x, dirView.y, dirView.z, 0];
+                    transformVec4(worldDirVec, dirClip, camMat);
+
+                    const dirWorld = {
+                        x: worldDirVec[0],
+                        y: worldDirVec[1],
+                        z: worldDirVec[2]
+                    };
+
+                    // F. Orient Controller
+                    // This rotates the controller so its -Z axis points along dirWorld
+                    const ctrlQuat = quatLookAt(dirWorld, { x: 0, y: 1, z: 0 });
                     device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
                 }
             } else {
