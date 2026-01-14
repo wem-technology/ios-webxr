@@ -7,11 +7,9 @@ import WebKit
 class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScriptMessageHandler {
     weak var webView: WKWebView?
     weak var arView: ARSCNView?
-    var dataCallbackName: String?
     var isSessionRunning = false
 
     var onSessionActiveChanged: ((Bool) -> Void)?
-    
     var onNavigationChanged: (() -> Void)?
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -58,21 +56,19 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                 replyToJS(callback: callback, data: "ios-ar-device-id")
             }
         case "requestSession":
-            if let options = body["options"] as? [String: Any],
-               let callbackName = body["data_callback"] as? String
-            {
-                self.dataCallbackName = callbackName
-                self.startARSession(options: options)
-                
-                // Notify UI to hide address bar
-                self.onSessionActiveChanged?(true)
-                
-                if let responseCallback = body["callback"] as? String {
-                    replyToJS(
-                        callback: responseCallback,
-                        data: ["cameraAccess": true, "worldAccess": true, "webXRAccess": true])
-                }
+            // Fix: Modified to accept the format sent by the IWER Bridge
+            let options = body["options"] as? [String: Any] ?? [:]
+            
+            self.startARSession(options: options)
+            
+            // Notify UI to hide address bar
+            self.onSessionActiveChanged?(true)
+            
+            // Resolve the JS Promise
+            if let callback = body["callback"] as? String {
+                replyToJS(callback: callback, data: "session-started")
             }
+            
         case "stopAR":
             // JS requested stop
             self.stopSession(notifyJS: false)
@@ -107,7 +103,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         // 2. Notify UI to show address bar again
         self.onSessionActiveChanged?(false)
         
-        // 3. Force Reload the Page
+        // 3. Force Reload the Page to clear WebGL state
         print("AR Session stopped. Reloading web page to clean state.")
         webView?.reload()
     }
@@ -159,10 +155,8 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
         MainActor.assumeIsolated {
-            guard isSessionRunning,
-                let webView = self.webView,
-                let callbackName = self.dataCallbackName
-            else { return }
+            // Fix: Removed dependency on dataCallbackName
+            guard isSessionRunning, let webView = self.webView else { return }
 
             frameCounter += 1
             let shouldSendVideo = (frameCounter % videoFrameSkip == 0)
@@ -170,6 +164,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             let orientation: UIInterfaceOrientation = .portrait
             let viewportSize = webView.bounds.size
 
+            // WebXR expects Column-Major matrices
             let viewMatrix = frame.camera.viewMatrix(for: orientation)
             let cameraTransform = viewMatrix.inverse
             let projMatrix = frame.camera.projectionMatrix(
@@ -220,9 +215,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                  jsCommand += "window.NativeARData.video_updated = false;"
             }
 
-            // 4. Execute callback
-            jsCommand += "\(callbackName)();"
-
+            // Fix: Removed the trailing function call (callbackName()) which was undefined on JS side
             webView.evaluateJavaScript(jsCommand, completionHandler: nil)
         }
     }
