@@ -110,6 +110,9 @@ struct ARWebView: UIViewRepresentable {
         guard let webView = context.coordinator.webView,
               let arView = context.coordinator.arView else { return }
         
+        // Push the actual viewport size to the coordinator safely
+        context.coordinator.updateViewportSize(webView.bounds.size)
+        
         if isARActive {
             // AR Mode: Show AR View, Make Web Transparent
             arView.isHidden = false
