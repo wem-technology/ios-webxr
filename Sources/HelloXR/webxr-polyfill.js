@@ -8565,12 +8565,8 @@ window.iwer = {
     const { XRDevice, XRSpace, XRHitTestResult, XRRigidTransform, XRFrame, XRSession } = window.iwer;
 
     // --- Configuration ---
-    // Fix: Set USER_HEIGHT to 0 to align ARKit origin (ground) exactly with WebXR 'local' space origin.
+    // User Height 0.0 keeps ARKit floor aligned with WebXR local space (y=0)
     const USER_HEIGHT = 0.0;
-
-    // Fix: Offset the controller from the camera so it feels like a hand, not a laser from the eye.
-    // Right: 20cm, Down: 30cm, Forward: -40cm (relative to camera)
-    const HAND_OFFSET = { x: 0.2, y: -0.3, z: -0.4 };
 
     // --- Math Helpers ---
 
@@ -8578,7 +8574,6 @@ window.iwer = {
         if (!m || m.length < 16) return null;
         const px = m[12], py = m[13], pz = m[14];
 
-        // Extract Rotation Matrix elements (Column Major)
         const m00 = m[0], m01 = m[1], m02 = m[2];
         const m10 = m[4], m11 = m[5], m12 = m[6];
         const m20 = m[8], m21 = m[9], m22 = m[10];
@@ -8640,7 +8635,6 @@ window.iwer = {
         let r = from.x * to.x + from.y * to.y + from.z * to.z;
 
         if (r < -1 + EPS) {
-            // Vectors are opposite
             return { x: 0, y: 1, z: 0, w: 0 };
         } else {
             const s = Math.sqrt(2 * (1 + r));
@@ -8776,7 +8770,7 @@ window.iwer = {
             if (pose) {
                 camPos = pose.position;
                 camQuat = pose.quaternion;
-                // Position camera with optional user height offset
+                // Position camera
                 device.position.set(camPos.x, camPos.y + USER_HEIGHT, camPos.z);
                 device.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
@@ -8791,17 +8785,20 @@ window.iwer = {
 
         // 3. Update Controller (Raycaster)
         if (device.controllers && device.controllers.right) {
-            // Apply Hand Offset (rotate offset by camera quat to keep relative to head)
-            const offsetRotated = applyQuat(HAND_OFFSET, camQuat);
+
+            // Fix: Position the controller exactly at the camera position
+            // This ensures the ray originates from the "camera" (eye),
+            // creating a direct line through the touched pixel.
             device.controllers.right.position.set(
-                camPos.x + offsetRotated.x,
-                camPos.y + USER_HEIGHT + offsetRotated.y,
-                camPos.z + offsetRotated.z
+                camPos.x,
+                camPos.y,
+                camPos.z
             );
+
             device.controllers.right.connected = true;
 
             if (touchState.active) {
-                // --- GEOMETRIC UNPROJECTION (Fixes Sideways/Opposite issues) ---
+                // --- GEOMETRIC UNPROJECTION ---
 
                 // 1. Calculate Normalized Device Coordinates
                 const ndcX = (touchState.x / window.innerWidth) * 2 - 1;
@@ -8832,7 +8829,7 @@ window.iwer = {
                 device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
 
             } else {
-                // Default: Controller aligns with camera rotation
+                // Default: Controller aligns with camera rotation (straight ahead)
                 device.controllers.right.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
