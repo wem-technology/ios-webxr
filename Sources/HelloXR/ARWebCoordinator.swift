@@ -25,17 +25,12 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     }
 
     // --- AR / Image Processing Properties ---
-    
-    // Reuse CIContext for performance
     let ciContext = CIContext(options: [.useSoftwareRenderer: false])
-    // Cache the sRGB color space
     let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 
     // Performance Control
     var frameCounter = 0
-    // Target ~10 FPS for video sending (Assuming 60FPS native)
     let videoFrameSkip = 6
-    // Max dimension for the video frame sent to JS (drastically reduces Base64 size)
     let maxVideoDimension: CGFloat = 480.0
     
     // --- WKScriptMessageHandler ---
@@ -56,25 +51,18 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                 replyToJS(callback: callback, data: "ios-ar-device-id")
             }
         case "requestSession":
-            // Fix: Modified to accept the format sent by the IWER Bridge
             let options = body["options"] as? [String: Any] ?? [:]
-            
             self.startARSession(options: options)
-            
-            // Notify UI to hide address bar
             self.onSessionActiveChanged?(true)
             
-            // Resolve the JS Promise
             if let callback = body["callback"] as? String {
                 replyToJS(callback: callback, data: "session-started")
             }
             
         case "stopAR":
-            // JS requested stop
             self.stopSession(notifyJS: false)
             
         case "hitTest":
-            // Handle Hit Testing using modern Raycast API
             if let x = body["x"] as? Double,
                let y = body["y"] as? Double,
                let callback = body["callback"] as? String {
@@ -88,23 +76,17 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     func startARSession(options: [String: Any]) {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
+        // Ensure gravity alignment so y=0 is consistent with WebXR expectations
+        config.worldAlignment = .gravity
         arView?.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         isSessionRunning = true
     }
     
-    // Helper to stop session from either JS or SwiftUI
     func stopSession(notifyJS: Bool = true) {
         guard isSessionRunning else { return }
-        
-        // 1. Stop Native Session immediately
         isSessionRunning = false
         arView?.session.pause()
-        
-        // 2. Notify UI to show address bar again
         self.onSessionActiveChanged?(false)
-        
-        // 3. Force Reload the Page to clear WebGL state
-        print("AR Session stopped. Reloading web page to clean state.")
         webView?.reload()
     }
     
@@ -117,17 +99,14 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             y: CGFloat(y) * arView.bounds.height
         )
         
+        // Prioritize existing planes (geometry), then estimated planes
+        let queryTypes: [ARRaycastQuery.Target] = [.existingPlaneGeometry, .estimatedPlane, .existingPlaneInfinite]
         var results: [ARRaycastResult] = []
         
-        // 1. Try Existing Plane Geometry
-        if let query = arView.raycastQuery(from: point, allowing: .existingPlaneGeometry, alignment: .any) {
-            results = arView.session.raycast(query)
-        }
-        
-        // 2. Fallback to Estimated Plane
-        if results.isEmpty {
-            if let query = arView.raycastQuery(from: point, allowing: .estimatedPlane, alignment: .any) {
+        for type in queryTypes {
+            if let query = arView.raycastQuery(from: point, allowing: type, alignment: .any) {
                 results = arView.session.raycast(query)
+                if !results.isEmpty { break }
             }
         }
         
@@ -155,7 +134,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
         MainActor.assumeIsolated {
-            // Fix: Removed dependency on dataCallbackName
             guard isSessionRunning, let webView = self.webView else { return }
 
             frameCounter += 1
@@ -164,7 +142,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             let orientation: UIInterfaceOrientation = .portrait
             let viewportSize = webView.bounds.size
 
-            // WebXR expects Column-Major matrices
             let viewMatrix = frame.camera.viewMatrix(for: orientation)
             let cameraTransform = viewMatrix.inverse
             let projMatrix = frame.camera.projectionMatrix(
@@ -176,37 +153,27 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
             var jsCommand = "if(!window.NativeARData){window.NativeARData={};}"
             
-            // 1. Direct assignments
             jsCommand += "window.NativeARData.timestamp = \(frame.timestamp * 1000);"
             jsCommand += "window.NativeARData.light_intensity = \(frame.lightEstimate?.ambientIntensity ?? 1000);"
-            jsCommand += "window.NativeARData.worldMappingStatus = 'ar_worldmapping_not_available';"
-            
-            // 2. Matrix Arrays (Send Every Frame - 60FPS)
             jsCommand += "window.NativeARData.camera_transform = \(fastFloatArrayToString(cameraTransform));"
             jsCommand += "window.NativeARData.camera_view = \(fastFloatArrayToString(viewMatrix));"
             jsCommand += "window.NativeARData.projection_camera = \(fastFloatArrayToString(projMatrix));"
 
-            // 3. Native Video (Send Throttled - ~10FPS)
-            // ARKit buffers are usually landscape. Since we rotate to .right (Portrait),
-            // we must swap width and height for the JS payload.
+            // Send Video Frame
             let rawWidth = CVPixelBufferGetWidth(frame.capturedImage)
             let rawHeight = CVPixelBufferGetHeight(frame.capturedImage)
             
-            // In portrait (orientation .right), these flip
+            // Swap dimensions for portrait
             let finalWidth = rawHeight
             let finalHeight = rawWidth
             
             if shouldSendVideo {
                 let pixelBuffer = frame.capturedImage
-                // We pass a scaling factor to reduce resolution and speed up Base64 encoding
-                // Calculate scale to fit within maxVideoDimension
                 let maxDim = max(CGFloat(finalWidth), CGFloat(finalHeight))
                 let scale = maxDim > maxVideoDimension ? (maxVideoDimension / maxDim) : 1.0
 
                 if let base64String = convertPixelBufferToBase64(pixelBuffer, scale: scale, quality: 0.5) {
                     jsCommand += "window.NativeARData.video_data = '\(base64String)';"
-                    // We report the *original* aspect ratio dimensions to JS so texture mapping stays correct,
-                    // even though the physical pixel data is smaller.
                     jsCommand += "window.NativeARData.video_width = \(finalWidth);"
                     jsCommand += "window.NativeARData.video_height = \(finalHeight);"
                     jsCommand += "window.NativeARData.video_updated = true;"
@@ -215,7 +182,9 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                  jsCommand += "window.NativeARData.video_updated = false;"
             }
 
-            // Fix: Removed the trailing function call (callbackName()) which was undefined on JS side
+            // Trigger the JS frame loop callback if it exists
+            jsCommand += "if(window.arkitCallbackOnData) window.arkitCallbackOnData();"
+
             webView.evaluateJavaScript(jsCommand, completionHandler: nil)
         }
     }
@@ -226,26 +195,13 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         -> String?
     {
         var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        
-        // Downscale if necessary
         if scale < 1.0 {
             let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
             ciImage = ciImage.transformed(by: scaleTransform)
         }
-
-        // Render to CGImage first
-        guard
-            let cgImage = ciContext.createCGImage(
-                ciImage, from: ciImage.extent, format: .RGBA8, colorSpace: sRGBColorSpace)
-        else {
-            return nil
-        }
-
-        // Orientation .right handles the rotation from ARKit camera sensor (landscape) to UI (Portrait)
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent, format: .RGBA8, colorSpace: sRGBColorSpace) else { return nil }
         let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
-
         guard let jpegData = uiImage.jpegData(compressionQuality: quality) else { return nil }
-
         return jpegData.base64EncodedString()
     }
 

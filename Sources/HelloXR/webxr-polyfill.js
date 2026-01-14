@@ -8562,11 +8562,15 @@ window.iwer = {
         return;
     }
 
-    const { XRDevice } = window.iwer;
+    const { XRDevice, XRSpace, XRHitTestResult, XRRigidTransform, XRFrame, XRSession } = window.iwer;
 
     // --- Configuration ---
-    // Offset ARKit (0,0,0) to eye-level so y=0 acts as the floor in Three.js
-    const USER_HEIGHT = 1.6;
+    // Fix: Set USER_HEIGHT to 0 to align ARKit origin (ground) exactly with WebXR 'local' space origin.
+    const USER_HEIGHT = 0.0;
+
+    // Fix: Offset the controller from the camera so it feels like a hand, not a laser from the eye.
+    // Right: 20cm, Down: 30cm, Forward: -40cm (relative to camera)
+    const HAND_OFFSET = { x: 0.2, y: -0.3, z: -0.4 };
 
     // --- Math Helpers ---
 
@@ -8574,7 +8578,7 @@ window.iwer = {
         if (!m || m.length < 16) return null;
         const px = m[12], py = m[13], pz = m[14];
 
-        // Extract Rotation Matrix elements
+        // Extract Rotation Matrix elements (Column Major)
         const m00 = m[0], m01 = m[1], m02 = m[2];
         const m10 = m[4], m11 = m[5], m12 = m[6];
         const m20 = m[8], m21 = m[9], m22 = m[10];
@@ -8613,118 +8617,39 @@ window.iwer = {
         };
     }
 
-    // Standard 4x4 Matrix Inversion
-    function invertMatrix(out, a) {
-        let a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
-        let a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
-        let a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
-        let a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+    // Rotates a vector (v) by a quaternion (q)
+    function applyQuat(v, q) {
+        const x = v.x, y = v.y, z = v.z;
+        const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
 
-        let b00 = a00 * a11 - a01 * a10;
-        let b01 = a00 * a12 - a02 * a10;
-        let b02 = a00 * a13 - a03 * a10;
-        let b03 = a01 * a12 - a02 * a11;
-        let b04 = a01 * a13 - a03 * a11;
-        let b05 = a02 * a13 - a03 * a12;
-        let b06 = a20 * a31 - a21 * a30;
-        let b07 = a20 * a32 - a22 * a30;
-        let b08 = a20 * a33 - a23 * a30;
-        let b09 = a21 * a32 - a22 * a31;
-        let b10 = a21 * a33 - a23 * a31;
-        let b11 = a22 * a33 - a23 * a32;
+        const ix = qw * x + qy * z - qz * y;
+        const iy = qw * y + qz * x - qx * z;
+        const iz = qw * z + qx * y - qy * x;
+        const iw = -qx * x - qy * y - qz * z;
 
-        let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-        if (!det) return null;
-        det = 1.0 / det;
-
-        out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
-        out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
-        out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
-        out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
-        out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
-        out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
-        out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
-        out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
-        out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
-        out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
-        out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
-        out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
-        out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
-        out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
-        out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
-        out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
-        return out;
+        return {
+            x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
+            y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
+            z: iz * qw + iw * -qz + ix * -qy - iy * -qx
+        };
     }
 
-    // Multiply Vector4 by Mat4
-    function transformVec4(out, v, m) {
-        let x = v[0], y = v[1], z = v[2], w = v[3];
-        out[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
-        out[1] = m[1] * x + m[5] * y + m[9] * z + m[13] * w;
-        out[2] = m[2] * x + m[6] * y + m[10] * z + m[14] * w;
-        out[3] = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
-        return out;
-    }
+    // Calculates quaternion to rotate vector 'from' to vector 'to'
+    function setQuatFromUnitVectors(from, to) {
+        const EPS = 0.000001;
+        let r = from.x * to.x + from.y * to.y + from.z * to.z;
 
-    // Create a Quaternion looking in 'direction'
-    // This creates a rotation where the object's Z axis faces -direction
-    // (Three.js objects look down -Z, so this aligns object -Z to direction)
-    function quatLookAt(direction, up) {
-        let z = { x: -direction.x, y: -direction.y, z: -direction.z };
-        let len = Math.sqrt(z.x * z.x + z.y * z.y + z.z * z.z);
-        if (len === 0) return { x: 0, y: 0, z: 0, w: 1 };
-        z.x /= len; z.y /= len; z.z /= len;
-
-        let x = {
-            x: up.y * z.z - up.z * z.y,
-            y: up.z * z.x - up.x * z.z,
-            z: up.x * z.y - up.y * z.x
-        };
-        let xLen = Math.sqrt(x.x * x.x + x.y * x.y + x.z * x.z);
-        if (xLen === 0) return { x: 0, y: 0, z: 0, w: 1 };
-        x.x /= xLen; x.y /= xLen; x.z /= xLen;
-
-        let y = {
-            x: z.y * x.z - z.z * x.y,
-            y: z.z * x.x - z.x * x.z,
-            z: z.x * x.y - z.y * x.x
-        };
-
-        const m00 = x.x, m01 = x.y, m02 = x.z;
-        const m10 = y.x, m11 = y.y, m12 = y.z;
-        const m20 = z.x, m21 = z.y, m22 = z.z;
-
-        const trace = m00 + m11 + m22;
-        let q = { x: 0, y: 0, z: 0, w: 1 };
-
-        if (trace > 0) {
-            const s = 0.5 / Math.sqrt(trace + 1.0);
-            q.w = 0.25 / s;
-            q.x = (m21 - m12) * s;
-            q.y = (m02 - m20) * s;
-            q.z = (m10 - m01) * s;
+        if (r < -1 + EPS) {
+            // Vectors are opposite
+            return { x: 0, y: 1, z: 0, w: 0 };
         } else {
-            if (m00 > m11 && m00 > m22) {
-                const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
-                q.w = (m21 - m12) / s;
-                q.x = 0.25 * s;
-                q.y = (m01 + m10) / s;
-                q.z = (m02 + m20) / s;
-            } else if (m11 > m22) {
-                const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
-                q.w = (m02 - m20) / s;
-                q.x = (m01 + m10) / s;
-                q.y = 0.25 * s;
-                q.z = (m12 + m21) / s;
-            } else {
-                const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
-                q.w = (m10 - m01) / s;
-                q.x = (m02 + m20) / s;
-                q.y = (m12 + m21) / s;
-                q.z = 0.25 * s;
-            }
+            const s = Math.sqrt(2 * (1 + r));
+            const x = (from.y * to.z - from.z * to.y) / s;
+            const y = (from.z * to.x - from.x * to.z) / s;
+            const z = (from.x * to.y - from.y * to.x) / s;
+            const w = 0.5 * s;
+            return { x, y, z, w };
         }
-        return q;
     }
 
     function getFovyFromProjection(m) {
@@ -8738,7 +8663,17 @@ window.iwer = {
         constructor() {
             super({
                 name: 'ARKit Device',
-                controllerConfig: metaQuest3.controllerConfig,
+                controllerConfig: {
+                    profileId: 'generic-touch',
+                    fallbackProfileIds: ['generic-trigger-squeeze-thumbstick'],
+                    layout: {
+                        right: {
+                            gamepad: { mapping: 'xr-standard', buttons: [{ id: 'trigger', type: 'analog', eventTrigger: 'select' }], axes: [] },
+                            numHapticActuators: 0
+                        },
+                        left: null
+                    }
+                },
                 supportedSessionModes: ['inline', 'immersive-ar'],
                 internalNominalFrameRate: 60,
                 supportedFeatures: [
@@ -8752,12 +8687,37 @@ window.iwer = {
                 },
                 interactionMode: 'world-space'
             });
+            this.nativeHitTestResults = [];
         }
     }
 
     const device = new ARKitXRDevice();
     device.installRuntime();
     console.log("[Bridge] IWER Runtime Installed");
+
+    // --- Native Hit Test Implementation (IWER Overrides) ---
+
+    const originalRequestHitTestSource = XRSession.prototype.requestHitTestSource;
+    XRSession.prototype.requestHitTestSource = function (options) {
+        return originalRequestHitTestSource.call(this, options).then(source => {
+            source._isNativeCompatible = true;
+            return source;
+        });
+    };
+
+    XRFrame.prototype.getHitTestResults = function (hitTestSource) {
+        if (!hitTestSource._isNativeCompatible) return [];
+        const globalSpace = device.globalSpace;
+
+        if (device.nativeHitTestResults && device.nativeHitTestResults.length > 0) {
+            return device.nativeHitTestResults.map(hit => {
+                const matrix = new Float32Array(hit.world_transform);
+                const offsetSpace = new XRSpace(globalSpace, matrix);
+                return new XRHitTestResult(this, offsetSpace);
+            });
+        }
+        return [];
+    };
 
     // --- Input Tracking ---
 
@@ -8770,11 +8730,8 @@ window.iwer = {
             touchState.y = e.touches[0].clientY;
         }
 
-        // Pass trigger state to IWER controller
-        // We use the Right controller to represent the primary touch interaction
         if (device && device.controllers && device.controllers.right) {
             const val = isActive ? 1.0 : 0.0;
-            // The HTML example uses 'selectstart' which triggers on button value change
             device.controllers.right.updateButtonValue('trigger', val);
             device.controllers.right.updateButtonTouch('trigger', isActive);
         }
@@ -8786,36 +8743,47 @@ window.iwer = {
 
     // --- Driver Loop ---
 
-    // Cached Arrays to avoid garbage collection
-    const invProj = new Float32Array(16);
-    const clipVec = new Float32Array(4);
-    const viewVec = new Float32Array(4);
-    const worldDirVec = new Float32Array(4);
-
     function arKitDriverLoop() {
         requestAnimationFrame(arKitDriverLoop);
+
+        // -- Hit Test Request --
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hitTest) {
+            const targetX = touchState.active ? (touchState.x / window.innerWidth) : 0.5;
+            const targetY = touchState.active ? (touchState.y / window.innerHeight) : 0.5;
+
+            const cbName = "onHitTestResult_" + Math.floor(Math.random() * 1000);
+            window[cbName] = (results) => {
+                delete window[cbName];
+                device.nativeHitTestResults = results || [];
+            };
+
+            window.webkit.messageHandlers.hitTest.postMessage({
+                x: targetX,
+                y: targetY,
+                callback: cbName
+            });
+        }
 
         if (!window.NativeARData) return;
 
         // 1. Update Camera/Headset Pose
         let camPos = { x: 0, y: 0, z: 0 };
         let camQuat = { x: 0, y: 0, z: 0, w: 1 };
-        let camMat = window.NativeARData.camera_transform;
+        const camMat = window.NativeARData.camera_transform;
 
         if (camMat) {
             const pose = decomposeMatrix(camMat);
             if (pose) {
                 camPos = pose.position;
                 camQuat = pose.quaternion;
-
-                // FIX: Apply Height Offset to Camera so y=0 looks like floor
+                // Position camera with optional user height offset
                 device.position.set(camPos.x, camPos.y + USER_HEIGHT, camPos.z);
                 device.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
 
         // 2. Update FOV
-        let proj = window.NativeARData.projection_camera;
+        const proj = window.NativeARData.projection_camera;
         if (proj) {
             const fovy = getFovyFromProjection(proj);
             if (!isNaN(fovy)) device.fovy = fovy;
@@ -8823,64 +8791,48 @@ window.iwer = {
 
         // 3. Update Controller (Raycaster)
         if (device.controllers && device.controllers.right) {
-            // Controller origin matches Camera origin + Height
-            device.controllers.right.position.set(camPos.x, camPos.y + USER_HEIGHT, camPos.z);
+            // Apply Hand Offset (rotate offset by camera quat to keep relative to head)
+            const offsetRotated = applyQuat(HAND_OFFSET, camQuat);
+            device.controllers.right.position.set(
+                camPos.x + offsetRotated.x,
+                camPos.y + USER_HEIGHT + offsetRotated.y,
+                camPos.z + offsetRotated.z
+            );
             device.controllers.right.connected = true;
 
-            if (touchState.active && proj && camMat) {
-                // --- FULL UNPROJECTION (Screen -> Ray Direction) ---
+            if (touchState.active) {
+                // --- GEOMETRIC UNPROJECTION (Fixes Sideways/Opposite issues) ---
 
-                // A. Convert Screen to Normalized Device Coordinates (NDC)
-                // X: -1 (left) to 1 (right)
-                // Y: +1 (top) to -1 (bottom) in WebGL
+                // 1. Calculate Normalized Device Coordinates
                 const ndcX = (touchState.x / window.innerWidth) * 2 - 1;
-                const ndcY = 1 - (touchState.y / window.innerHeight) * 2;
+                const ndcY = 1 - (touchState.y / window.innerHeight) * 2; // Flip Y for WebGL coords
 
-                // B. Inverse Projection Matrix to get View Space coordinates
-                if (invertMatrix(invProj, proj)) {
-                    // Pick a point on the far plane/frustum in Clip Space
-                    // z = 0.5 (normalized depth)
-                    clipVec[0] = ndcX;
-                    clipVec[1] = ndcY;
-                    clipVec[2] = 0.5;
-                    clipVec[3] = 1.0;
+                // 2. Calculate Ray in Camera Local Space
+                //    WebXR standard: -Z is forward, +Y is up, +X is right.
+                const aspectRatio = window.innerWidth / window.innerHeight;
+                const tanHalfFov = Math.tan(device.fovy * 0.5);
 
-                    // C. Unproject to Camera View Space
-                    transformVec4(viewVec, clipVec, invProj);
+                const rayLocal = {
+                    x: ndcX * tanHalfFov * aspectRatio,
+                    y: ndcY * tanHalfFov,
+                    z: -1.0 // Forward into screen
+                };
 
-                    if (viewVec[3] !== 0) {
-                        viewVec[0] /= viewVec[3];
-                        viewVec[1] /= viewVec[3];
-                        viewVec[2] /= viewVec[3];
-                    }
+                // Normalize Local Ray
+                const len = Math.sqrt(rayLocal.x * rayLocal.x + rayLocal.y * rayLocal.y + rayLocal.z * rayLocal.z);
+                rayLocal.x /= len; rayLocal.y /= len; rayLocal.z /= len;
 
-                    // D. Calculate Direction (View Space)
-                    // Since origin is (0,0,0) in View Space, the vector IS the point
-                    const len = Math.sqrt(viewVec[0] * viewVec[0] + viewVec[1] * viewVec[1] + viewVec[2] * viewVec[2]);
-                    const dirView = {
-                        x: viewVec[0] / len,
-                        y: viewVec[1] / len,
-                        z: viewVec[2] / len
-                    };
+                // 3. Transform Ray to World Space (Rotate by Camera Quaternion)
+                const rayWorld = applyQuat(rayLocal, camQuat);
 
-                    // E. Transform Direction to World Space (Rotate only)
-                    // Treat as vector (w=0)
-                    const dirClip = [dirView.x, dirView.y, dirView.z, 0];
-                    transformVec4(worldDirVec, dirClip, camMat);
+                // 4. Orient Controller
+                //    Rotate the Controller's default forward vector (0,0,-1) to match rayWorld
+                const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
 
-                    const dirWorld = {
-                        x: worldDirVec[0],
-                        y: worldDirVec[1],
-                        z: worldDirVec[2]
-                    };
+                device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
 
-                    // F. Orient Controller
-                    // This rotates the controller so its -Z axis points along dirWorld
-                    const ctrlQuat = quatLookAt(dirWorld, { x: 0, y: 1, z: 0 });
-                    device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
-                }
             } else {
-                // Not touching: Just align with camera forward vector
+                // Default: Controller aligns with camera rotation
                 device.controllers.right.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
@@ -8893,7 +8845,6 @@ window.iwer = {
 
     const originalRequestSession = navigator.xr.requestSession.bind(navigator.xr);
     navigator.xr.requestSession = async (mode, options) => {
-        console.log(`[Bridge] requestSession: ${mode}`);
         if (mode === 'immersive-ar') {
             await new Promise((resolve) => {
                 const callbackName = "onARStart_" + Math.random().toString(36).substr(2);
