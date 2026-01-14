@@ -8776,19 +8776,14 @@ window.iwer = {
             }
         }
 
-        // 2. Update FOV
         const proj = window.NativeARData.projection_camera;
         if (proj) {
             const fovy = getFovyFromProjection(proj);
             if (!isNaN(fovy)) device.fovy = fovy;
         }
 
-        // 3. Update Controller (Raycaster)
         if (device.controllers && device.controllers.right) {
 
-            // Fix: Position the controller exactly at the camera position
-            // This ensures the ray originates from the "camera" (eye),
-            // creating a direct line through the touched pixel.
             device.controllers.right.position.set(
                 camPos.x,
                 camPos.y,
@@ -8798,38 +8793,29 @@ window.iwer = {
             device.controllers.right.connected = true;
 
             if (touchState.active) {
-                // --- GEOMETRIC UNPROJECTION ---
 
-                // 1. Calculate Normalized Device Coordinates
                 const ndcX = (touchState.x / window.innerWidth) * 2 - 1;
-                const ndcY = 1 - (touchState.y / window.innerHeight) * 2; // Flip Y for WebGL coords
+                const ndcY = 1 - (touchState.y / window.innerHeight) * 2;
 
-                // 2. Calculate Ray in Camera Local Space
-                //    WebXR standard: -Z is forward, +Y is up, +X is right.
                 const aspectRatio = window.innerWidth / window.innerHeight;
                 const tanHalfFov = Math.tan(device.fovy * 0.5);
 
                 const rayLocal = {
                     x: ndcX * tanHalfFov * aspectRatio,
                     y: ndcY * tanHalfFov,
-                    z: -1.0 // Forward into screen
+                    z: -1.0
                 };
 
-                // Normalize Local Ray
                 const len = Math.sqrt(rayLocal.x * rayLocal.x + rayLocal.y * rayLocal.y + rayLocal.z * rayLocal.z);
                 rayLocal.x /= len; rayLocal.y /= len; rayLocal.z /= len;
 
-                // 3. Transform Ray to World Space (Rotate by Camera Quaternion)
                 const rayWorld = applyQuat(rayLocal, camQuat);
 
-                // 4. Orient Controller
-                //    Rotate the Controller's default forward vector (0,0,-1) to match rayWorld
                 const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
 
                 device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
 
             } else {
-                // Default: Controller aligns with camera rotation (straight ahead)
                 device.controllers.right.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
