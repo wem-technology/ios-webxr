@@ -1,4 +1,5 @@
 import SwiftUI
+import VisionKit
 
 struct ContentView: View {
 
@@ -15,6 +16,10 @@ struct ContentView: View {
     
     // UI State
     @State private var isNavExpanded: Bool = false
+    
+    // Scanner State
+    @State private var isShowingScanner: Bool = false
+    @State private var scannedTextResult: String?
     
     // Custom Color: #272727 (RGB 39, 39, 39)
     private let safeAreaColor = Color(red: 39/255, green: 39/255, blue: 39/255)
@@ -74,9 +79,36 @@ struct ContentView: View {
                 navAction = .load(validURL)
             }
         }
+        // Handle Scanned Text
+        .onChange(of: scannedTextResult) { newValue in
+            if let text = newValue {
+                urlString = text
+                processAndLoad()
+                // Reset result so we can scan the same text again if needed
+                scannedTextResult = nil
+            }
+        }
+        // Present the Scanner
+        .sheet(isPresented: $isShowingScanner) {
+            if #available(iOS 16.0, *) {
+                // We wrap this in a NavigationView so we can add a Cancel button
+                NavigationView {
+                    TextScannerView(scannedText: $scannedTextResult)
+                        .navigationTitle("Tap text to load")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel") {
+                                    isShowingScanner = false
+                                }
+                            }
+                        }
+                }
+            } else {
+                Text("Scan-to-text requires iOS 16 or later")
+            }
+        }
     }
-    
-    // MARK: - Subviews
     
     var navToggleButton: some View {
         Button(action: {
@@ -107,9 +139,16 @@ struct ContentView: View {
             .disabled(!canGoForward)
             
             HStack {
-                Image(systemName: "globe")
-                    .foregroundColor(.gray)
-                
+                if #available(iOS 16.0, *), DataScannerViewController.isSupported {
+                    Button(action: {
+                        isShowingScanner = true
+                    }) {
+                        Image(systemName: "text.viewfinder")
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.leading, 4)
+                }
+
                 TextField("Search or enter website", text: $urlString)
                     .keyboardType(.webSearch)
                     .autocapitalization(.none)
@@ -191,8 +230,6 @@ struct ContentView: View {
             Spacer()
         }
     }
-    
-    // MARK: - Logic
     
     private func processAndLoad() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
