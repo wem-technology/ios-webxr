@@ -5200,6 +5200,7 @@ host this content on a secure origin for the best user experience.
                 case 'alignEUS': return true;
                 case 'hit-test': return true;
                 case 'dom-overlay': return true;
+                case 'camera-access': return true;
                 default: return false;
             }
         }
@@ -5242,7 +5243,7 @@ host this content on a secure origin for the best user experience.
             if (enabledFeatures.has("worldSensing")) {
                 ARKitOptions.worldSensing = true;
             }
-            if (enabledFeatures.has("computerVision")) {
+            if (enabledFeatures.has("computerVision") || enabledFeatures.has("camera-access")) {
                 ARKitOptions.videoFrames = true;
             }
             if (enabledFeatures.has("alignEUS")) {

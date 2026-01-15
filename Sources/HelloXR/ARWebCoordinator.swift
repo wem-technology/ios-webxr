@@ -10,6 +10,8 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     weak var arView: ARSCNView?
     var dataCallbackName: String?
     var isSessionRunning = false
+    
+    var isCameraAccessRequested = false
 
     var onSessionActiveChanged: ((Bool) -> Void)?
     var onNavigationChanged: (() -> Void)?
@@ -52,13 +54,21 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                let callbackName = body["data_callback"] as? String
             {
                 self.dataCallbackName = callbackName
+                
+                self.isCameraAccessRequested = options["computer_vision_data"] as? Bool ?? false
+                
                 self.startARSession(options: options)
                 self.onSessionActiveChanged?(true)
                 
                 if let responseCallback = body["callback"] as? String {
                     replyToJS(
                         callback: responseCallback,
-                        data: ["cameraAccess": true, "worldAccess": true, "webXRAccess": true])
+                        data: [
+                            "cameraAccess": self.isCameraAccessRequested, 
+                            "worldAccess": true, 
+                            "webXRAccess": true
+                        ]
+                    )
                 }
             }
         case "stopAR":
@@ -85,6 +95,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     func stopSession(notifyJS: Bool = true) {
         guard isSessionRunning else { return }
         isSessionRunning = false
+        isCameraAccessRequested = false 
         arView?.session.pause()
         self.onSessionActiveChanged?(false)
         print("AR Session stopped. Reloading web page.")
@@ -129,7 +140,8 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             else { return }
 
             frameCounter += 1
-            let shouldSendVideo = (frameCounter % videoFrameSkip == 0)
+            
+            let shouldSendVideo = isCameraAccessRequested && (frameCounter % videoFrameSkip == 0)
 
             let viewportSize = webView.bounds.size
             let orientation: UIInterfaceOrientation = .portrait
@@ -162,6 +174,8 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
                     jsCommand += "window.NativeARData.video_width = \(result.width);"
                     jsCommand += "window.NativeARData.video_height = \(result.height);"
                     jsCommand += "window.NativeARData.video_updated = true;"
+                } else {
+                    jsCommand += "window.NativeARData.video_updated = false;"
                 }
             } else {
                  jsCommand += "window.NativeARData.video_updated = false;"
