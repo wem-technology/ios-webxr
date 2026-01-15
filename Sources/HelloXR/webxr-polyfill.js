@@ -8655,11 +8655,13 @@ window.iwer = {
                     profileId: '',
                     fallbackProfileIds: [],
                     layout: {
-                        right: {
+                        // CHANGED: Handedness set to 'none'
+                        none: {
                             gamepad: { mapping: 'xr-standard', buttons: [{ id: 'trigger', type: 'analog', eventTrigger: 'select' }], axes: [] },
                             numHapticActuators: 0
                         },
-                        left: null
+                        left: null,
+                        right: null
                     }
                 },
                 supportedSessionModes: ['inline', 'immersive-ar'],
@@ -8673,7 +8675,8 @@ window.iwer = {
                     'immersive-ar': 'alpha-blend',
                     'inline': 'opaque'
                 },
-                interactionMode: 'world-space'
+                // CHANGED: Interaction mode set to screen-space
+                interactionMode: 'screen-space'
             });
             this.nativeHitTestResults = [];
         }
@@ -8681,15 +8684,16 @@ window.iwer = {
 
     const device = new ARKitXRDevice();
 
-    if (device.controllers && device.controllers.right) {
-        Object.defineProperty(device.controllers.right.inputSource, 'targetRayMode', {
+    // CHANGED: Override targetRayMode for 'none' controller
+    if (device.controllers && device.controllers.none) {
+        Object.defineProperty(device.controllers.none.inputSource, 'targetRayMode', {
             get: () => 'screen',
             configurable: true
         });
     }
 
     device.installRuntime();
-    console.log("[Bridge] IWER Runtime Installed");
+    console.log("[Bridge] IWER Runtime Installed (Handedness: None, Mode: Screen-Space)");
 
     // --- Native Hit Test Implementation ---
 
@@ -8719,14 +8723,12 @@ window.iwer = {
 
     let touchState = { active: false, x: 0, y: 0 };
     // Counter to keep the ray at the touch position for a few frames after release
-    // This prevents the "snap to center" before the selectend event processes.
     let framesSinceRelease = 100;
 
     function updateTouch(e, type) {
         const isActive = (type === 'start' || type === 'move');
         touchState.active = isActive;
 
-        // On 'end', touches is empty, so we must use changedTouches to get the release coordinate
         const touchList = isActive ? e.touches : e.changedTouches;
 
         if (touchList && touchList.length > 0) {
@@ -8738,10 +8740,11 @@ window.iwer = {
             framesSinceRelease = 0;
         }
 
-        if (device && device.controllers && device.controllers.right) {
+        // CHANGED: Trigger update on 'none' controller
+        if (device && device.controllers && device.controllers.none) {
             const val = isActive ? 1.0 : 0.0;
-            device.controllers.right.updateButtonValue('trigger', val);
-            device.controllers.right.updateButtonTouch('trigger', isActive);
+            device.controllers.none.updateButtonValue('trigger', val);
+            device.controllers.none.updateButtonTouch('trigger', isActive);
         }
     }
 
@@ -8795,22 +8798,23 @@ window.iwer = {
             if (!isNaN(fovy)) device.fovy = fovy;
         }
 
-        // 2. Input Raycasting
-        if (device.controllers && device.controllers.right) {
+        // 2. Input Raycasting for 'none' controller (screen interaction)
+        // CHANGED: Targeting 'none' controller
+        if (device.controllers && device.controllers.none) {
 
-            device.controllers.right.position.set(
+            // Align origin with camera
+            device.controllers.none.position.set(
                 camPos.x,
                 camPos.y,
                 camPos.z
             );
 
-            device.controllers.right.connected = true;
+            device.controllers.none.connected = true;
 
-            // Use touch coordinates if active OR if we recently released (grace period)
-            // This prevents the ray from snapping to center immediately on touchend
             const useTouchRay = touchState.active || (framesSinceRelease < 1);
 
             if (useTouchRay && projMat) {
+                // Calculate ray from screen tap
                 const oneOverScaleX = 1.0 / projMat[0];
                 const oneOverScaleY = 1.0 / projMat[5];
 
@@ -8831,11 +8835,11 @@ window.iwer = {
                 const rayWorld = applyQuat(rayLocal, camQuat);
                 const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
 
-                device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
+                device.controllers.none.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
 
             } else {
-                // Gaze Mode (align with camera) when idle
-                device.controllers.right.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
+                // Default to Camera forward if no touch
+                device.controllers.none.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
 
