@@ -32,7 +32,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     var frameCounter = 0
     let videoFrameSkip = 4 
     
-    
     func userContentController(
         _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
     ) {
@@ -79,7 +78,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
     func startARSession(options: [String: Any]) {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
-        // Standard 60FPS ARKit
         arView?.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         isSessionRunning = true
     }
@@ -183,7 +181,6 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
     private func processCameraImage(_ pixelBuffer: CVPixelBuffer, viewportSize: CGSize) -> ProcessedImage? {
         var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        
         ciImage = ciImage.oriented(.right)
         
         let imgWidth = ciImage.extent.width
@@ -208,19 +205,23 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
             cropRect = CGRect(x: 0, y: yOffset, width: imgWidth, height: newHeight)
         }
         
+        // 1. Crop to aspect ratio
         let croppedImage = ciImage.cropped(to: cropRect)
         
+        // 2. Reduce resolution by 2x
+        let scaledImage = croppedImage.transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
+        
         guard let jpegData = ciContext.jpegRepresentation(
-            of: croppedImage,
-            colorSpace: sRGBColorSpace,
+            of: scaledImage,
+            colorSpace: sRGBColorSpace
         ) else {
             return nil
         }
         
         return ProcessedImage(
             base64: jpegData.base64EncodedString(),
-            width: Int(cropRect.width),
-            height: Int(cropRect.height)
+            width: Int(scaledImage.extent.width),
+            height: Int(scaledImage.extent.height)
         )
     }
 
