@@ -77,6 +77,7 @@ struct ARWebView: UIViewRepresentable {
         webView.backgroundColor = .systemBackground
         webView.scrollView.backgroundColor = .systemBackground
         webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.scrollView.bounces = false
 
         // 3. Assemble View Hierarchy
         // Container -> ARView (Back) -> WebView (Front)
