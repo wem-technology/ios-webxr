@@ -8562,11 +8562,7 @@ window.iwer = {
         return;
     }
 
-    const { XRDevice, XRSpace, XRHitTestResult, XRRigidTransform, XRFrame, XRSession } = window.iwer;
-
-    // --- Configuration ---
-    // User Height 0.0 keeps ARKit floor aligned with WebXR local space (y=0)
-    const USER_HEIGHT = 0.0;
+    const { XRDevice, XRSpace, XRHitTestResult, XRFrame, XRSession } = window.iwer;
 
     // --- Math Helpers ---
 
@@ -8612,7 +8608,6 @@ window.iwer = {
         };
     }
 
-    // Rotates a vector (v) by a quaternion (q)
     function applyQuat(v, q) {
         const x = v.x, y = v.y, z = v.z;
         const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
@@ -8629,7 +8624,6 @@ window.iwer = {
         };
     }
 
-    // Calculates quaternion to rotate vector 'from' to vector 'to'
     function setQuatFromUnitVectors(from, to) {
         const EPS = 0.000001;
         let r = from.x * to.x + from.y * to.y + from.z * to.z;
@@ -8658,8 +8652,8 @@ window.iwer = {
             super({
                 name: 'ARKit Device',
                 controllerConfig: {
-                    profileId: 'generic-touch',
-                    fallbackProfileIds: ['generic-trigger-squeeze-thumbstick'],
+                    profileId: '',
+                    fallbackProfileIds: [],
                     layout: {
                         right: {
                             gamepad: { mapping: 'xr-standard', buttons: [{ id: 'trigger', type: 'analog', eventTrigger: 'select' }], axes: [] },
@@ -8686,10 +8680,18 @@ window.iwer = {
     }
 
     const device = new ARKitXRDevice();
+
+    if (device.controllers && device.controllers.right) {
+        Object.defineProperty(device.controllers.right.inputSource, 'targetRayMode', {
+            get: () => 'screen',
+            configurable: true
+        });
+    }
+
     device.installRuntime();
     console.log("[Bridge] IWER Runtime Installed");
 
-    // --- Native Hit Test Implementation (IWER Overrides) ---
+    // --- Native Hit Test Implementation ---
 
     const originalRequestHitTestSource = XRSession.prototype.requestHitTestSource;
     XRSession.prototype.requestHitTestSource = function (options) {
@@ -8716,12 +8718,24 @@ window.iwer = {
     // --- Input Tracking ---
 
     let touchState = { active: false, x: 0, y: 0 };
+    // Counter to keep the ray at the touch position for a few frames after release
+    // This prevents the "snap to center" before the selectend event processes.
+    let framesSinceRelease = 100;
 
-    function updateTouch(e, isActive) {
+    function updateTouch(e, type) {
+        const isActive = (type === 'start' || type === 'move');
         touchState.active = isActive;
-        if (e.touches && e.touches.length > 0) {
-            touchState.x = e.touches[0].clientX;
-            touchState.y = e.touches[0].clientY;
+
+        // On 'end', touches is empty, so we must use changedTouches to get the release coordinate
+        const touchList = isActive ? e.touches : e.changedTouches;
+
+        if (touchList && touchList.length > 0) {
+            touchState.x = touchList[0].clientX;
+            touchState.y = touchList[0].clientY;
+        }
+
+        if (isActive) {
+            framesSinceRelease = 0;
         }
 
         if (device && device.controllers && device.controllers.right) {
@@ -8731,11 +8745,13 @@ window.iwer = {
         }
     }
 
-    window.addEventListener('touchstart', (e) => updateTouch(e, true), { passive: false });
-    window.addEventListener('touchmove', (e) => updateTouch(e, true), { passive: false });
-    window.addEventListener('touchend', (e) => updateTouch(e, false), { passive: false });
+    window.addEventListener('touchstart', (e) => updateTouch(e, 'start'), { passive: false });
+    window.addEventListener('touchmove', (e) => updateTouch(e, 'move'), { passive: false });
+    window.addEventListener('touchend', (e) => updateTouch(e, 'end'), { passive: false });
 
     // --- Driver Loop ---
+    let camPos = { x: 0, y: 0, z: 0 };
+    let camQuat = { x: 0, y: 0, z: 0, w: 1 };
 
     function arKitDriverLoop() {
         requestAnimationFrame(arKitDriverLoop);
@@ -8761,27 +8777,25 @@ window.iwer = {
         if (!window.NativeARData) return;
 
         // 1. Update Camera/Headset Pose
-        let camPos = { x: 0, y: 0, z: 0 };
-        let camQuat = { x: 0, y: 0, z: 0, w: 1 };
         const camMat = window.NativeARData.camera_transform;
+        const projMat = window.NativeARData.projection_camera;
 
         if (camMat) {
             const pose = decomposeMatrix(camMat);
             if (pose) {
                 camPos = pose.position;
                 camQuat = pose.quaternion;
-                // Position camera
-                device.position.set(camPos.x, camPos.y + USER_HEIGHT, camPos.z);
+                device.position.set(camPos.x, camPos.y, camPos.z);
                 device.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
         }
 
-        const proj = window.NativeARData.projection_camera;
-        if (proj) {
-            const fovy = getFovyFromProjection(proj);
+        if (projMat) {
+            const fovy = getFovyFromProjection(projMat);
             if (!isNaN(fovy)) device.fovy = fovy;
         }
 
+        // 2. Input Raycasting
         if (device.controllers && device.controllers.right) {
 
             device.controllers.right.position.set(
@@ -8792,32 +8806,41 @@ window.iwer = {
 
             device.controllers.right.connected = true;
 
-            if (touchState.active) {
+            // Use touch coordinates if active OR if we recently released (grace period)
+            // This prevents the ray from snapping to center immediately on touchend
+            const useTouchRay = touchState.active || (framesSinceRelease < 1);
 
-                const ndcX = (touchState.x / window.innerWidth) * 2 - 1;
-                const ndcY = 1 - (touchState.y / window.innerHeight) * 2;
+            if (useTouchRay && projMat) {
+                const oneOverScaleX = 1.0 / projMat[0];
+                const oneOverScaleY = 1.0 / projMat[5];
 
-                const aspectRatio = window.innerWidth / window.innerHeight;
-                const tanHalfFov = Math.tan(device.fovy * 0.5);
+                const ndcX = (touchState.x / window.innerWidth) * 2.0 - 1.0;
+                const ndcY = 1.0 - (touchState.y / window.innerHeight) * 2.0;
 
                 const rayLocal = {
-                    x: ndcX * tanHalfFov * aspectRatio,
-                    y: ndcY * tanHalfFov,
+                    x: ndcX * oneOverScaleX,
+                    y: ndcY * oneOverScaleY,
                     z: -1.0
                 };
 
                 const len = Math.sqrt(rayLocal.x * rayLocal.x + rayLocal.y * rayLocal.y + rayLocal.z * rayLocal.z);
-                rayLocal.x /= len; rayLocal.y /= len; rayLocal.z /= len;
+                rayLocal.x /= len;
+                rayLocal.y /= len;
+                rayLocal.z /= len;
 
                 const rayWorld = applyQuat(rayLocal, camQuat);
-
                 const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
 
                 device.controllers.right.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
 
             } else {
+                // Gaze Mode (align with camera) when idle
                 device.controllers.right.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
             }
+        }
+
+        if (!touchState.active) {
+            framesSinceRelease++;
         }
     }
 
