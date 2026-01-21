@@ -1,9 +1,12 @@
-name: HelloXR
+name: Cyango
 options:
   bundleIdPrefix: ${BUNDLE_ID}
   deploymentTarget:
     iOS: "16.0"
   xcodeVersion: "15.0"
+packages:
+  WebXRKit:
+    path: ./WebXRKit
 targets:
   HelloXR:
     type: application
@@ -13,6 +16,8 @@ targets:
     dependencies:
       - target: HelloXRClip
         embed: true
+      - package: WebXRKit
+        product: WebXRKit
     settings:
       # Points to the Main App Plist
       INFOPLIST_FILE: Info.plist
@@ -23,6 +28,8 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
       SWIFT_VERSION: 5.0
       CODE_SIGN_ENTITLEMENTS: "HelloXR.entitlements"
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
       SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
       SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
       TARGETED_DEVICE_FAMILY: 1
@@ -32,6 +39,9 @@ targets:
     platform: iOS
     sources:
       - path: Sources/HelloXR
+    dependencies:
+      - package: WebXRKit
+        product: WebXRKit
     settings:
       # Points to the App Clip Plist
       INFOPLIST_FILE: Info-Clip.plist
@@ -42,6 +52,8 @@ targets:
       ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
       SWIFT_VERSION: 5.0
       CODE_SIGN_ENTITLEMENTS: "HelloXRClip.entitlements"
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
       SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
       SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
       TARGETED_DEVICE_FAMILY: 1

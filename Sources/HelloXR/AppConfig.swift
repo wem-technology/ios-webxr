@@ -1,5 +1,5 @@
 import Foundation
 
 struct AppConfig {
-    static let startURL = "https://helloxr.app"
+    static let startURL = "https://story.cyango.com"
 }

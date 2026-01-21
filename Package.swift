@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "HelloXR",
+    name: "Cyango",
     platforms: [
         .iOS(.v16)
     ],
@@ -11,16 +11,18 @@ let package = Package(
         // An xtool project should contain exactly one library product,
         // representing the main app.
         .library(
-            name: "HelloXR",
+            name: "Cyango",
             targets: ["HelloXR"]
         )
+    ],
+    dependencies: [
+        .package(path: "./WebXRKit")
     ],
     targets: [
         .target(
             name: "HelloXR",
-            resources: [
-                // This tells Swift to bundle this file so it's accessible at runtime
-                .process("webxr-polyfill.js")
+            dependencies: [
+                .product(name: "WebXRKit", package: "WebXRKit")
             ]
         )
     ]
