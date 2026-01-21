@@ -62,7 +62,38 @@ public struct ARWebView: UIViewRepresentable {
         // 2. Create Web View
         let webConfig = WKWebViewConfiguration()
         webConfig.allowsInlineMediaPlayback = true
+        
+        // Set custom user agent to identify WebXRKit
+        if let defaultUA = webConfig.applicationNameForUserAgent {
+            webConfig.applicationNameForUserAgent = "\(defaultUA) WebXRKit/1.0"
+        } else {
+            webConfig.applicationNameForUserAgent = "WebXRKit/1.0"
+        }
+        
         let contentController = webConfig.userContentController
+        
+        // Detect if running in App Clip
+        let isAppClip = Bundle.main.bundleURL.pathExtension == "appex" || 
+                       Bundle.main.bundleIdentifier?.contains(".Clip") == true
+        
+        // Inject detection properties before other scripts
+        let detectionScript = WKUserScript(
+            source: """
+                (function() {
+                    window.isWebXRKit = true;
+                    window.isAppClip = \(isAppClip);
+                    window.webXRKitVersion = '1.0';
+                    Object.defineProperty(navigator, 'isWebXRKit', {
+                        get: function() { return true; },
+                        enumerable: true,
+                        configurable: false
+                    });
+                })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        contentController.addUserScript(detectionScript)
         
         // Register handlers
         contentController.add(context.coordinator, name: "initAR")
