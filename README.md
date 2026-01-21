@@ -2,6 +2,12 @@
 
 <img src="assets/demo.gif" width="250" alt="App Demo">
 
+## Links
+
+Open this in Safari for the App Clip experience: [HelloXR page](https://helloxr.app)
+
+Or download the full app here: [HelloXR app](https://apps.apple.com/us/app/helloxr/id6757726359)
+
 ## Overview
 
 This application serves as a native shell to enable WebXR support on iOS devices, addressing the current lack of native support in mobile Safari. It bridges native ARKit tracking and camera data into a `WKWebView`, allowing standard WebXR applications (such as Three.js or React Three Fiber) to run with AR features enabled.
