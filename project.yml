@@ -1,4 +1,4 @@
-name: Cyango
+name: HelloXR
 options:
   bundleIdPrefix: ${BUNDLE_ID}
   deploymentTarget:

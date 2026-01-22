@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct CyangoApp: App {
+struct HelloXRApp: App {
     // This state acts as the bridge between the App Clip invocation and the WebView
     @State private var deepLinkURL: URL?
 
@@ -18,7 +18,7 @@ struct CyangoApp: App {
     func handleUserActivity(_ activity: NSUserActivity) {
         guard let incomingURL = activity.webpageURL else { return }
         
-        // Logic: Check if url is story.cyango.com/?to=...
+        // Logic: Check if url is helloxr.app/?to=...
         // We look for the "to" query parameter
         if let components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: true),
            let queryItems = components.queryItems,
