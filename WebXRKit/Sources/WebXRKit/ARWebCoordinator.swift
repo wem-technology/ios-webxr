@@ -4,7 +4,7 @@ import SceneKit
 import WebKit
 
 @MainActor
-class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScriptMessageHandler {
+public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScriptMessageHandler {
     weak var webView: WKWebView?
     weak var arView: ARSCNView?
     var dataCallbackName: String?
@@ -19,19 +19,19 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
     private var isJsProcessingFrame = false
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         onNavigationChanged?()
     }
     
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         onNavigationChanged?()
     }
     
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         onNavigationChanged?()
     }
     
-    func userContentController(
+    public func userContentController(
         _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
     ) {
         guard let body = message.body as? [String: Any] else { return }
@@ -82,14 +82,14 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         }
     }
 
-    func startARSession(options: [String: Any]) {
+    public func startARSession(options: [String: Any]) {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
         arView?.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         isSessionRunning = true
     }
     
-    func stopSession(notifyJS: Bool = true) {
+    public func stopSession(notifyJS: Bool = true) {
         guard isSessionRunning else { return }
         isSessionRunning = false
         isCameraAccessRequested = false 
@@ -129,8 +129,9 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
         replyToJS(callback: callback, data: hitsPayload)
     }
 
-    nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        MainActor.assumeIsolated {
+    nonisolated public func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        MainActor.assumeIsolated { [weak self] in
+            guard let self = self else { return }
             // If the JS bridge is still busy with the previous frame, we skip this update.
             // This prevents "frame piling" which is the primary cause of AR wobble.
             guard isSessionRunning,
@@ -141,7 +142,7 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
             isJsProcessingFrame = true
 
-            let orientation: UIInterfaceOrientation = .portrait
+            let orientation = UIInterfaceOrientation.portrait
             let viewportSize = webView.bounds.size
 
             // 1. Calculate Matrices
@@ -182,7 +183,9 @@ class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate, WKScr
 
             // Execute and wait for completion before allowing the next frame
             webView.evaluateJavaScript(jsCommand) { [weak self] _, _ in
-                self?.isJsProcessingFrame = false
+                Task { @MainActor in
+                    self?.isJsProcessingFrame = false
+                }
             }
         }
     }

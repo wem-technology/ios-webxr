@@ -38,10 +38,64 @@ The application functions as a bridge between Swift (ARKit) and JavaScript (WebG
 * iOS Device with A9 chip or later (ARKit support required).
 * *Note: AR features will not function on the iOS Simulator.*
 
-### Building
+### Testing with xtool
 
 1.  Clone the repository.
 2.  Build and test on a connected device using `xtool dev` [xtool](https://github.com/xtool-org/xtool).
+
+### Building with XCode
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd ios-webxr
+   ```
+
+2. **Install XcodeGen:**
+   ```bash
+   brew install xcodegen
+   ```
+
+3. **Generate Xcode project:**
+   ```bash
+   xcodegen generate
+   ```
+
+4. **Open in Xcode:**
+   ```bash
+   open *.xcodeproj
+   ```
+
+5. **Build and run:**
+   - Connect your iOS device
+   - Select your device as build target
+   - Press `Cmd+R` to build and run
+
+## Using WebXRKit in Your Own Project
+
+WebXRKit is a reusable Swift Package. To use it in your own project:
+
+### Swift Package Manager
+
+Add to your `Package.swift`:
+```swift
+dependencies: [
+    .package(path: "./WebXRKit")
+]
+```
+
+Then import and use:
+```swift
+import WebXRKit
+
+ARWebView(
+    action: $navAction,
+    isARActive: $isARActive,
+    currentURLString: $urlString,
+    canGoBack: $canGoBack,
+    canGoForward: $canGoForward
+)
+```
 
 ## Usage
 

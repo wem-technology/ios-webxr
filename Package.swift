@@ -15,12 +15,14 @@ let package = Package(
             targets: ["HelloXR"]
         )
     ],
+    dependencies: [
+        .package(path: "./WebXRKit")
+    ],
     targets: [
         .target(
             name: "HelloXR",
-            resources: [
-                // This tells Swift to bundle this file so it's accessible at runtime
-                .process("webxr-polyfill.js")
+            dependencies: [
+                .product(name: "WebXRKit", package: "WebXRKit")
             ]
         )
     ]

@@ -30,10 +30,6 @@
 	<true/>
 	<key>MinimumOSVersion</key>
 	<string>16.0</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required for AR experiences.</string>
-	
-	<!-- APP CLIP SPECIFIC CONFIGURATION -->
 	<key>NSAppClip</key>
 	<dict>
 		<key>NSAppClipRequestEphemeralUserNotification</key>
@@ -41,12 +37,12 @@
 		<key>NSAppClipRequestLocationConfirmation</key>
 		<false/>
 	</dict>
-	
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>1</integer>
-		<integer>2</integer>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required for AR experiences.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>

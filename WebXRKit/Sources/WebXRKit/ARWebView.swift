@@ -3,8 +3,8 @@ import ARKit
 import SceneKit
 import WebKit
 
-// Enum to control WebView actions from SwiftUI
-enum WebViewNavigationAction: Equatable {
+/// Enum to control WebView actions from SwiftUI
+public enum WebViewNavigationAction: Equatable {
     case idle
     case load(URL)
     case goBack
@@ -12,15 +12,19 @@ enum WebViewNavigationAction: Equatable {
     case reload
 }
 
-struct ARWebView: UIViewRepresentable {
+/// A SwiftUI view that bridges ARKit to WKWebView, enabling WebXR experiences on iOS.
+/// This view combines an ARSCNView (for camera passthrough) with a WKWebView (for web content)
+/// and injects a JavaScript polyfill to enable WebXR API support.
+@available(iOS 16.0, *)
+public struct ARWebView: UIViewRepresentable {
     // Control bindings
-    @Binding var action: WebViewNavigationAction
-    @Binding var isARActive: Bool
+    @Binding public var action: WebViewNavigationAction
+    @Binding public var isARActive: Bool
     
     // State reporting bindings
-    @Binding var currentURLString: String
-    @Binding var canGoBack: Bool
-    @Binding var canGoForward: Bool
+    @Binding public var currentURLString: String
+    @Binding public var canGoBack: Bool
+    @Binding public var canGoForward: Bool
 
     private var resourceBundle: Bundle {
         #if SWIFT_PACKAGE
@@ -30,7 +34,22 @@ struct ARWebView: UIViewRepresentable {
         #endif
     }
 
-    func makeUIView(context: Context) -> UIView {
+    public init(
+        action: Binding<WebViewNavigationAction>,
+        isARActive: Binding<Bool>,
+        currentURLString: Binding<String>,
+        canGoBack: Binding<Bool>,
+        canGoForward: Binding<Bool>
+    ) {
+        self._action = action
+        self._isARActive = isARActive
+        self._currentURLString = currentURLString
+        self._canGoBack = canGoBack
+        self._canGoForward = canGoForward
+    }
+
+    @MainActor
+    public func makeUIView(context: Context) -> UIView {
         let containerView = UIView()
         containerView.backgroundColor = .systemBackground
         
@@ -73,12 +92,6 @@ struct ARWebView: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: webConfig)
         if #available(iOS 16.4, *) { webView.isInspectable = true }
         
-        // Default state: Opaque (Normal Browsing)
-        // webView.isOpaque = true
-        // webView.backgroundColor = .systemBackground
-        // webView.scrollView.backgroundColor = .systemBackground
-        // webView.translatesAutoresizingMaskIntoConstraints = false
-
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
@@ -116,7 +129,8 @@ struct ARWebView: UIViewRepresentable {
         return containerView
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    @MainActor
+    public func updateUIView(_ uiView: UIView, context: Context) {
         guard let webView = context.coordinator.webView,
               let arView = context.coordinator.arView else { return }
         
@@ -158,7 +172,8 @@ struct ARWebView: UIViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> ARWebCoordinator {
+    @MainActor
+    public func makeCoordinator() -> ARWebCoordinator {
         let coordinator = ARWebCoordinator()
         
         coordinator.onSessionActiveChanged = { isActive in

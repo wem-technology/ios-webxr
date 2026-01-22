@@ -1,10 +1,33 @@
+# macOS
 .DS_Store
-/.build
-/Packages
-xcuserdata/
+.AppleDouble
+.LSOverride
+
+# Xcode
+# Ignore generated Xcode projects (regenerated from project.yml via XcodeGen)
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM
+*.xcarchive
+build/
 DerivedData/
-.swiftpm/configuration/registries.json
-.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# Swift Package Manager
+.build/
+**/.build/
+/Packages
+.swiftpm/
 .netrc
 
+# xtool
 /xtool
+
+# App-specific
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
