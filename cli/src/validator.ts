@@ -21,6 +21,7 @@ export interface WhitelabelConfig {
     deploymentTarget: string;
     xcodeVersion: string;
   };
+  iconPath?: string;
 }
 
 export function validateConfig(config: WhitelabelConfig): string[] {

@@ -159,16 +159,41 @@ export async function renameEntitlements(outputDir: string, config: WhitelabelCo
   }
 }
 
-export async function generateAppIcons(outputDir: string, config: WhitelabelConfig): Promise<void> {
+export async function generateAppIcons(outputDir: string, config: WhitelabelConfig, templateDir?: string): Promise<void> {
   const proj = config.project;
   const app = config.app;
   const mainTarget = app.mainTargetName || proj.name;
 
-  // Look for icon.png in template/output directory
-  const iconSource = path.join(outputDir, 'icon.png');
+  // Determine icon source path
+  let iconSource: string;
+  if (config.iconPath) {
+    // Use custom icon path (can be absolute or relative to current working directory)
+    if (path.isAbsolute(config.iconPath)) {
+      iconSource = config.iconPath;
+    } else {
+      // Try relative to current working directory first, then template directory
+      const cwdIconPath = path.resolve(process.cwd(), config.iconPath);
+      const templateIconPath = templateDir ? path.resolve(templateDir, config.iconPath) : null;
+      
+      if (await fs.pathExists(cwdIconPath)) {
+        iconSource = cwdIconPath;
+      } else if (templateIconPath && await fs.pathExists(templateIconPath)) {
+        iconSource = templateIconPath;
+      } else {
+        iconSource = cwdIconPath; // Will fail with better error message
+      }
+    }
+  } else {
+    // Default: look for icon.png in output directory
+    iconSource = path.join(outputDir, 'icon.png');
+  }
   
   if (!(await fs.pathExists(iconSource))) {
-    console.log('  ⚠ Warning: icon.png not found, skipping icon generation');
+    if (config.iconPath) {
+      console.log(`  ⚠ Warning: Icon file not found at ${iconSource}, skipping icon generation`);
+    } else {
+      console.log('  ⚠ Warning: icon.png not found, skipping icon generation');
+    }
     return;
   }
 
@@ -373,7 +398,7 @@ export async function generateWhitelabel(
   }
 
   // Generate app icons
-  await generateAppIcons(outputPath, config);
+  await generateAppIcons(outputPath, config, templateDir);
 
   console.log(`\n✅ White-label project generated successfully in: ${outputPath}`);
   console.log('\nNext steps:');

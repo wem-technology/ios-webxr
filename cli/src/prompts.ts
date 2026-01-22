@@ -202,6 +202,13 @@ export async function promptForConfig(): Promise<WhitelabelConfig> {
       message: 'Xcode target name for App Clip (optional, defaults to project name + Clip):',
       default: (answers: any) => `${answers.projectName || 'MyApp'}Clip`,
     },
+    {
+      type: 'input',
+      name: 'iconPath',
+      message: 'Path to app icon file (1024x1024 PNG, optional - defaults to icon.png in output directory):',
+      default: '',
+      filter: (input: string) => input.trim() || undefined,
+    },
   ]);
 
   const config: WhitelabelConfig = {
@@ -227,6 +234,7 @@ export async function promptForConfig(): Promise<WhitelabelConfig> {
       deploymentTarget: answers.deploymentTarget,
       xcodeVersion: answers.xcodeVersion,
     },
+    iconPath: answers.iconPath,
   };
 
   return config;

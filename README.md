@@ -177,6 +177,11 @@ npx --prefix cli ios-webxr-cli -f myapp.config.json -o ../MyApp
 - `deploymentTarget`: Minimum iOS version (e.g., `16.0`)
 - `xcodeVersion`: Xcode version requirement (e.g., `15.0`)
 
+**`iconPath`** (optional)
+- Custom path to the app icon file (1024x1024 PNG)
+- Can be absolute path or relative to current working directory
+- If not specified, defaults to `icon.png` in the output directory
+
 ## App Icon Generation
 
 The CLI automatically generates all required iOS app icon sizes from a single source image.
@@ -185,10 +190,25 @@ The CLI automatically generates all required iOS app icon sizes from a single so
 
 1. **Create your icon:**
    - Create a 1024x1024 pixel PNG image
-   - Name it `icon.png`
-   - Place it in your project root directory (same directory as your config file)
+   - You can either:
+     - Place it as `icon.png` in your project root directory (same directory as your config file) - **default behavior**
+     - Or specify a custom path using the `iconPath` option in your config file
 
-2. **Generate icons:**
+2. **Specify custom icon path (optional):**
+   Add `iconPath` to your config file:
+   ```json
+   {
+     "iconPath": "/path/to/your/icon.png"
+   }
+   ```
+   Or use a relative path:
+   ```json
+   {
+     "iconPath": "../shared-assets/icon.png"
+   }
+   ```
+
+3. **Generate icons:**
    When you run the CLI, it will automatically:
    - Detect `icon.png` in the output directory
    - Create `Sources/App/Assets.xcassets/AppIcon.appiconset/` structure
@@ -209,7 +229,9 @@ The CLI automatically generates all required iOS app icon sizes from a single so
    - Your app target → `Assets.xcassets` → `AppIcon`
    - All icon slots should be populated
 
-**Note:** If `icon.png` is not found, the CLI will skip icon generation and show a warning. You can add icons manually later in Xcode.
+**Note:** 
+- If the icon file is not found (either default `icon.png` or custom `iconPath`), the CLI will skip icon generation and show a warning. You can add icons manually later in Xcode.
+- Using a custom `iconPath` prevents overwriting existing icons in the output directory, which is useful when generating multiple projects or keeping icons in a shared location.
 
 ## App Clip Setup
 
