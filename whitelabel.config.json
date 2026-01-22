@@ -1,0 +1,24 @@
+{
+  "project": {
+    "name": "YourAppName",
+    "displayName": "Your App Display Name",
+    "bundleIdPrefix": "com.yourcompany.yourapp",
+    "version": "1.0.0",
+    "buildNumber": "1"
+  },
+  "app": {
+    "mainBundleId": "com.yourcompany.yourapp",
+    "clipBundleId": "com.yourcompany.yourapp.Clip",
+    "structName": "YourAppNameApp",
+    "startURL": "https://yourdomain.com",
+    "mainTargetName": "YourAppName",
+    "clipTargetName": "YourAppNameClip"
+  },
+  "domains": {
+    "associatedDomain": "yourdomain.com"
+  },
+  "ios": {
+    "deploymentTarget": "16.0",
+    "xcodeVersion": "15.0"
+  }
+}

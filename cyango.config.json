@@ -1,0 +1,24 @@
+{
+  "project": {
+    "name": "Cyango",
+    "displayName": "Cyango",
+    "bundleIdPrefix": "com.cyango.webxrios",
+    "version": "1.0.0",
+    "buildNumber": "1"
+  },
+  "app": {
+    "mainBundleId": "com.cyango.webxrios",
+    "clipBundleId": "com.cyango.webxrios.Clip",
+    "structName": "CyangoApp",
+    "startURL": "https://story.cyango.com",
+    "mainTargetName": "Cyango",
+    "clipTargetName": "CyangoClip"
+  },
+  "domains": {
+    "associatedDomain": "story.cyango.com"
+  },
+  "ios": {
+    "deploymentTarget": "16.0",
+    "xcodeVersion": "15.0"
+  }
+}
