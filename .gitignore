@@ -33,3 +33,7 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 Cyango/
+
+# CLI tool
+cli/node_modules/
+cli/dist/

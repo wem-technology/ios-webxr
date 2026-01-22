@@ -20,44 +20,63 @@ Built on **WebXRKit**, a reusable Swift Package that provides the WebXR polyfill
 
 ### Option 1: Generate White-Label Project (Recommended)
 
+1. **Install dependencies (one-time setup):**
+   ```bash
+   cd cli && npm install && cd ..
+   ```
+
+2. **Run the interactive CLI:**
+   ```bash
+   npx --prefix cli ios-webxr-cli
+   ```
+   
+   The CLI will prompt you for all configuration values:
+   - Project name (e.g., MyApp)
+   - App display name (e.g., My App)
+   - Bundle ID prefix (e.g., com.yourcompany.yourapp)
+   - Main app bundle ID
+   - App Clip bundle ID
+   - Swift struct name
+   - Start URL
+   - Associated domain
+   - Version and build number
+   - iOS deployment target
+   - Xcode version requirement
+   - Target names (optional)
+
+3. **Generate your Xcode project:**
+   ```bash
+   cd MyApp
+   xcodegen generate
+   open MyApp.xcodeproj
+   ```
+
+**Alternative: Using a config file**
+
+If you prefer to use a config file instead of interactive prompts:
+
 1. **Create a configuration file:**
    ```bash
    cp whitelabel.config.json myapp.config.json
    ```
 
-2. **Edit `myapp.config.json`** with your values:
-   ```json
-   {
-     "project": {
-       "name": "MyApp",
-       "displayName": "My Awesome App",
-       "bundleIdPrefix": "com.mycompany.myapp",
-       "version": "1.0.0",
-       "buildNumber": "1"
-     },
-     "app": {
-       "mainBundleId": "com.mycompany.myapp",
-       "clipBundleId": "com.mycompany.myapp.Clip",
-       "structName": "MyAppApp",
-       "startURL": "https://myapp.com"
-     },
-     "domains": {
-       "associatedDomain": "myapp.com"
-     },
-     "ios": {
-       "deploymentTarget": "16.0",
-       "xcodeVersion": "15.0"
-     }
-   }
+2. **Edit `myapp.config.json`** with your values (see Configuration Reference below)
+
+3. **Run with config file:**
+   ```bash
+   npx --prefix cli ios-webxr-cli -f myapp.config.json
    ```
 
-3. **Generate your project:**
-   ```bash
-   python3 generate_whitelabel.py -f myapp.config.json
-   cd MyApp
-   xcodegen generate
-   open MyApp.xcodeproj
-   ```
+**Alternative: Install globally (optional)**
+
+If you prefer to install it globally:
+```bash
+cd cli
+npm install
+npm link
+cd ..
+ios-webxr-cli
+```
 
 ### Option 2: Use Template Directly
 
@@ -76,6 +95,7 @@ Built on **WebXRKit**, a reusable Swift Package that provides the WebXR polyfill
 
 ## Prerequisites
 
+- Node.js 16+ and npm (for whitelabel CLI tool)
 - Xcode 14.0+ (15.0+ recommended)
 - XcodeGen (for generating Xcode project)
 - iOS Device with A9 chip or later (ARKit support required)
@@ -111,24 +131,31 @@ xtool dev
 
 ## White-Label Configuration
 
-The generator creates a new project directory (doesn't modify the template), replacing `${variable}` placeholders with your values.
+The CLI tool creates a new project directory (doesn't modify the template), replacing `${variable}` placeholders with your values.
 
 ### Command Line Options
 
-- `-f, --config-file`: Path to configuration JSON file
-- `-o, --output`: Output directory (default: inside workspace with project name)
-- `-t, --template`: Template directory (default: script directory)
+- `[config]` (positional): Path to configuration JSON file (optional - will prompt interactively if not provided)
+- `-f, --config-file <path>`: Path to configuration JSON file (alternative to positional argument)
+- `-o, --output <path>`: Output directory (default: inside template directory with project name)
+- `-t, --template <path>`: Template directory (default: current directory)
 
 **Examples:**
 ```bash
-# Use default config
-python3 generate_whitelabel.py
+# Interactive mode (prompts for all values)
+npx --prefix cli ios-webxr-cli
 
 # Use custom config file
-python3 generate_whitelabel.py -f myapp.config.json
+npx --prefix cli ios-webxr-cli -f myapp.config.json
 
 # Custom output directory
-python3 generate_whitelabel.py -f myapp.config.json -o ../MyApp
+npx --prefix cli ios-webxr-cli -o ../MyApp
+
+# Custom template directory
+npx --prefix cli ios-webxr-cli -t /path/to/template
+
+# Combine options
+npx --prefix cli ios-webxr-cli -f myapp.config.json -o ../MyApp
 ```
 
 ### Configuration Reference
@@ -224,7 +251,7 @@ The app extracts the `?to=` parameter and loads the target URL in the WebView.
 - `ARCameraFrameProcessor` - Processes ARFrame pixel buffers
 - `webxr-polyfill.js` - JavaScript polyfill intercepting WebXR API calls
 
-**2. App Layer** (`Sources/HelloXR/`)
+**2. App Layer** (`Sources/App/`)
 - Minimal app-specific code (~68 lines)
 - `App.swift` - App entry point and App Clip deep linking
 - `ContentView.swift` - Wraps ARWebView (no UI overlays)
@@ -274,6 +301,7 @@ xcodegen generate
 - **"Cannot find type 'ARFrame'"**: Building for iOS, not macOS
 - **"Module 'WebXRKit' not found"**: Regenerate project with `xcodegen generate`
 - **"Unable to find module dependency"**: Run `xcodebuild -resolvePackageDependencies`
+- **"Entitlements file was modified during the build"**: Ensure all `${variable}` placeholders are replaced. Regenerate the project if needed.
 
 ### App Clip Issues
 

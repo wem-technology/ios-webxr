@@ -1,0 +1,35 @@
+{
+  "name": "ios-webxr-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for generating white-label iOS WebXR projects",
+  "main": "dist/index.js",
+  "bin": {
+    "ios-webxr-cli": "bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "ios",
+    "webxr",
+    "whitelabel",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^8.2.6",
+    "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^8.2.10",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}
