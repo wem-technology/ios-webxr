@@ -31,3 +31,5 @@ DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+Cyango/

@@ -152,14 +152,14 @@ def update_project_yml(output_dir, config):
     content = replace_variables(content, variables)
     
     # Replace target names
-    content = re.sub(r'^  HelloXR:', f'  {main_target}:', content, flags=re.MULTILINE)
-    content = re.sub(r'^  HelloXRClip:', f'  {clip_target}:', content, flags=re.MULTILINE)
-    content = re.sub(r'      - target: HelloXRClip', f'      - target: {clip_target}', content)
+    content = re.sub(r'^  MainApp:', f'  {main_target}:', content, flags=re.MULTILINE)
+    content = re.sub(r'^  MainAppClip:', f'  {clip_target}:', content, flags=re.MULTILINE)
+    content = re.sub(r'      - target: MainAppClip', f'      - target: {clip_target}', content)
     
     # Replace entitlements file names
-    content = content.replace('CODE_SIGN_ENTITLEMENTS: "HelloXR.entitlements"', 
+    content = content.replace('CODE_SIGN_ENTITLEMENTS: "MainApp.entitlements"', 
                              f'CODE_SIGN_ENTITLEMENTS: "{main_target}.entitlements"')
-    content = content.replace('CODE_SIGN_ENTITLEMENTS: "HelloXRClip.entitlements"', 
+    content = content.replace('CODE_SIGN_ENTITLEMENTS: "MainAppClip.entitlements"', 
                              f'CODE_SIGN_ENTITLEMENTS: "{clip_target}.entitlements"')
     
     with open(project_yml_path, 'w') as f:
@@ -174,13 +174,13 @@ def rename_entitlements(output_dir, config):
     clip_target = app.get('clipTargetName', f"{proj['name']}Clip")
     
     # Rename main entitlements
-    old_main = output_dir / 'HelloXR.entitlements'
+    old_main = output_dir / 'MainApp.entitlements'
     new_main = output_dir / f'{main_target}.entitlements'
     if old_main.exists() and not new_main.exists():
         old_main.rename(new_main)
     
     # Rename clip entitlements
-    old_clip = output_dir / 'HelloXRClip.entitlements'
+    old_clip = output_dir / 'MainAppClip.entitlements'
     new_clip = output_dir / f'{clip_target}.entitlements'
     if old_clip.exists() and not new_clip.exists():
         old_clip.rename(new_clip)
@@ -290,21 +290,23 @@ def main():
     update_project_yml(output_path, config)
     print("  ✓ Updated project.yml")
     
+    # Update entitlements files before renaming (use template names)
+    update_file(output_path, 'MainApp.entitlements', {'associatedDomain': domains['associatedDomain']})
+    update_file(output_path, 'MainAppClip.entitlements', {
+        'mainBundleId': app['mainBundleId'],
+        'associatedDomain': domains['associatedDomain']
+    })
+    print("  ✓ Updated entitlements")
+    
     # Rename entitlements files
     rename_entitlements(output_path, config)
-    
-    # Get target names for file paths
-    main_target = app.get('mainTargetName', proj['name'])
-    clip_target = app.get('clipTargetName', f"{proj['name']}Clip")
     
     # Update all other files
     files_to_update = [
         ('Info.plist', ['displayName']),
         ('Info-Clip.plist', ['displayName']),
-        (f'{main_target}.entitlements', ['associatedDomain']),
-        (f'{clip_target}.entitlements', ['mainBundleId', 'associatedDomain']),
-        ('Sources/HelloXR/App.swift', ['structName', 'associatedDomain']),
-        ('Sources/HelloXR/AppConfig.swift', ['startURL']),
+        ('Sources/App/App.swift', ['structName', 'associatedDomain']),
+        ('Sources/App/AppConfig.swift', ['startURL']),
         ('Package.swift', ['projectName']),
         ('privacy_policy.md', ['displayName']),
         ('xtool-Info.plist', ['displayName']),
