@@ -53,7 +53,7 @@ targets:
     entitlements:
       path: Generated/WebXRApp.entitlements
       properties:
-        com.apple.developer.associated-domains: [appclips:${DOMAIN_URL}]
+        com.apple.developer.associated-domains: ["appclips:${DOMAIN_URL}"]
 
   # --- App Clip ---
   WebXRClip:
@@ -97,6 +97,6 @@ targets:
       path: Generated/WebXRClip.entitlements
       properties:
         com.apple.developer.on-demand-install-capable: true
-        com.apple.developer.associated-domains: [appclips:${DOMAIN_URL}]
+        com.apple.developer.associated-domains: ["appclips:${DOMAIN_URL}"]
         com.apple.developer.parent-application-identifiers:
-          - $(AppIdentifierPrefix)${BUNDLE_ID}
+          - "$(AppIdentifierPrefix)${BUNDLE_ID}"
