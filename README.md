@@ -51,22 +51,15 @@ The application functions as a bridge between Swift (ARKit) and JavaScript (WebG
    cd ios-webxr
    ```
 
-2. **Install XcodeGen:**
+2. **White-label:**
+   Edit `generate_xcode_project.sh` and create an icon.png with your own brand and company info
+
+3. **Generate and open Xcode project:**
    ```bash
-   brew install xcodegen
+   ./generate_xcode_project.sh
    ```
 
-3. **Generate Xcode project:**
-   ```bash
-   xcodegen generate
-   ```
-
-4. **Open in Xcode:**
-   ```bash
-   open *.xcodeproj
-   ```
-
-5. **Build and run:**
+4. **Build and run:**
    - Connect your iOS device
    - Select your device as build target
    - Press `Cmd+R` to build and run
