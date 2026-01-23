@@ -41,6 +41,7 @@ targets:
     info:
       path: Generated/Info.plist
       properties:
+        CFBundlePackageType: APPL
         WB_START_URL: ${START_URL} 
         CFBundleShortVersionString: ${VERSION}
         CFBundleVersion: ${BUILD_NUMBER}
@@ -81,6 +82,7 @@ targets:
     info:
       path: Generated/Info-Clip.plist
       properties:
+        CFBundlePackageType: APPL
         WB_START_URL: ${START_URL} 
         CFBundleShortVersionString: ${VERSION}
         CFBundleVersion: ${BUILD_NUMBER}
