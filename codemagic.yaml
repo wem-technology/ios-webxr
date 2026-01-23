@@ -11,88 +11,18 @@ workflows:
       groups:
         - Wem
       vars:
+        # Default Configuration
         APP_NAME: "HelloXR"
         BUNDLE_ID: "com.wemtechnology.helloxr"
+        DOMAIN_URL: "helloxr.app"
         START_URL: "https://helloxr.app"
-        XCODE_SCHEME: "HelloXR"
+        VERSION: "1.3.0"
+        BUILD_NUMBER: "1"
+        XCODE_SCHEME: "WebXRApp" 
       xcode: latest
       cocoapods: default
 
     scripts:
-      - name: Inject Configuration
-        script: |
-          echo "Injecting AppConfig..."
-          # Only AppConfig needs injection. 
-          # Info.plist and project.yml are handled by the repo and XcodeGen.
-          CONFIG_PATH="Sources/HelloXR/AppConfig.swift"
-          
-          cat <<EOF > "$CONFIG_PATH"
-          import Foundation
-          struct AppConfig {
-              static let startURL = "$START_URL"
-          }
-          EOF
-
-      - name: Generate App Icons
-        script: |
-          echo "Generating App Icons..."
-          ICON_SOURCE="icon.png"
-          if [ ! -f "$ICON_SOURCE" ]; then
-            echo "⚠️ No icon.png found! Downloading placeholder..."
-            curl -o "$ICON_SOURCE" https://dummyimage.com/1024x1024/007AFF/ffffff.jpg&text=XR
-          fi
-
-          ASSETS_DIR="Sources/HelloXR/Assets.xcassets"
-          ICONSET_DIR="$ASSETS_DIR/AppIcon.appiconset"
-          mkdir -p "$ICONSET_DIR"
-
-          cat <<EOF > "$ICONSET_DIR/Contents.json"
-          {
-            "images": [
-              {"size":"20x20","idiom":"iphone","filename":"Icon-20@2x.png","scale":"2x"},
-              {"size":"20x20","idiom":"iphone","filename":"Icon-20@3x.png","scale":"3x"},
-              {"size":"29x29","idiom":"iphone","filename":"Icon-29@2x.png","scale":"2x"},
-              {"size":"29x29","idiom":"iphone","filename":"Icon-29@3x.png","scale":"3x"},
-              {"size":"40x40","idiom":"iphone","filename":"Icon-40@2x.png","scale":"2x"},
-              {"size":"40x40","idiom":"iphone","filename":"Icon-40@3x.png","scale":"3x"},
-              {"size":"60x60","idiom":"iphone","filename":"Icon-60@2x.png","scale":"2x"},
-              {"size":"60x60","idiom":"iphone","filename":"Icon-60@3x.png","scale":"3x"},
-              {"size":"20x20","idiom":"ipad","filename":"Icon-20.png","scale":"1x"},
-              {"size":"20x20","idiom":"ipad","filename":"Icon-20@2x.png","scale":"2x"},
-              {"size":"29x29","idiom":"ipad","filename":"Icon-29.png","scale":"1x"},
-              {"size":"29x29","idiom":"ipad","filename":"Icon-29@2x.png","scale":"2x"},
-              {"size":"40x40","idiom":"ipad","filename":"Icon-40.png","scale":"1x"},
-              {"size":"40x40","idiom":"ipad","filename":"Icon-40@2x.png","scale":"2x"},
-              {"size":"76x76","idiom":"ipad","filename":"Icon-76.png","scale":"1x"},
-              {"size":"76x76","idiom":"ipad","filename":"Icon-76@2x.png","scale":"2x"},
-              {"size":"83.5x83.5","idiom":"ipad","filename":"Icon-83.5@2x.png","scale":"2x"},
-              {"size":"1024x1024","idiom":"ios-marketing","filename":"Icon-1024.png","scale":"1x"}
-            ],
-            "info": { "version": 1, "author": "xcode" }
-          }
-          EOF
-
-          function resize() {
-            sips -z $1 $1 -s format png "$ICON_SOURCE" --out "$ICONSET_DIR/$2" > /dev/null
-          }
-
-          resize 40 "Icon-20@2x.png"
-          resize 60 "Icon-20@3x.png"
-          resize 58 "Icon-29@2x.png"
-          resize 87 "Icon-29@3x.png"
-          resize 80 "Icon-40@2x.png"
-          resize 120 "Icon-40@3x.png"
-          resize 120 "Icon-60@2x.png"
-          resize 180 "Icon-60@3x.png"
-          resize 20 "Icon-20.png"
-          resize 29 "Icon-29.png"
-          resize 40 "Icon-40.png"
-          resize 76 "Icon-76.png"
-          resize 152 "Icon-76@2x.png"
-          resize 167 "Icon-83.5@2x.png"
-          resize 1024 "Icon-1024.png"
-          echo "✅ Icons generated."
-
       - name: Generate Xcode Project (XcodeGen)
         script: |
           brew install xcodegen
@@ -103,27 +33,19 @@ workflows:
 
       - name: Fetch Signing Files
         script: |
-          # Fetch Main App Profile
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-          
-          # Fetch App Clip Profile
-          app-store-connect fetch-signing-files "${BUNDLE_ID}.Clip" \
-            --type IOS_APP_STORE \
-            --create
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files "${BUNDLE_ID}.Clip" --type IOS_APP_STORE --create
 
       - name: Add Certificates to Keychain
         script: keychain add-certificates
 
       - name: Apply Provisioning Profiles
-        script: xcode-project use-profiles --project "HelloXR.xcodeproj"
+        script: |
+          xcode-project use-profiles --project "$APP_NAME.xcodeproj"
 
       - name: Build IPA
         script: |
-          xcode-project build-ipa \
-            --project "HelloXR.xcodeproj" \
-            --scheme "$XCODE_SCHEME"
+          xcode-project build-ipa --project "$APP_NAME.xcodeproj" --scheme "$XCODE_SCHEME"
 
     artifacts:
       - build/ios/ipa/*.ipa

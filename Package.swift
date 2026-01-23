@@ -3,16 +3,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "HelloXR",
+    name: "WebXRApp",
     platforms: [
         .iOS(.v16)
     ],
     products: [
-        // An xtool project should contain exactly one library product,
-        // representing the main app.
         .library(
-            name: "HelloXR",
-            targets: ["HelloXR"]
+            name: "WebXRApp",
+            targets: ["WebXRApp"]
         )
     ],
     dependencies: [
@@ -20,10 +18,11 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "HelloXR",
+            name: "WebXRApp",
             dependencies: [
                 .product(name: "WebXRKit", package: "WebXRKit")
-            ]
+            ],
+            path: "Sources/WebXRApp"
         )
     ]
 )
