@@ -5,9 +5,14 @@ struct ContentView: View {
 
     @Binding var externalLoadURL: URL?
 
-    // Navigation State
-    @State private var urlString: String = AppConfig.startURL
-    @State private var navAction: WebViewNavigationAction = .load(URL(string: AppConfig.startURL)!)
+    // Helper: Read URL from Info.plist (Injected by XCodeGen)
+    private static let startURL: String = {
+        return Bundle.main.object(forInfoDictionaryKey: "WB_START_URL") as? String ?? "https://helloxr.app"
+    }()
+
+    // Navigation State initialized with the plist value
+    @State private var urlString: String = ContentView.startURL
+    @State private var navAction: WebViewNavigationAction = .load(URL(string: ContentView.startURL)!)
     
     // Web State
     @State private var isARActive: Bool = false
