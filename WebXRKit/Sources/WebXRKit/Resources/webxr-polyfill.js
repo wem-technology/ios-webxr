@@ -8865,29 +8865,50 @@ window.iwer = {
 
     const originalRequestSession = navigator.xr.requestSession.bind(navigator.xr);
     navigator.xr.requestSession = async (mode, options) => {
+        console.log(`[Bridge] navigator.xr.requestSession called. Mode: ${mode}`);
+
         if (mode === 'immersive-ar') {
+            console.log("[Bridge] immersive-ar detected. initiating native handshake...");
             await new Promise((resolve) => {
                 const callbackName = "onARStart_" + Math.random().toString(36).substr(2);
+                console.log(`[Bridge] Creating callback: ${callbackName}`);
+
                 window[callbackName] = () => {
-                    console.log("[Bridge] Native AR Start Confirmed.");
+                    console.log("[Bridge] Native AR Start Confirmed (Callback triggered).");
                     delete window[callbackName];
                     resolve();
                 };
 
                 if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.requestSession) {
+                    console.log("[Bridge] Posting 'requestSession' message to Native...");
+
+                    let safeOptions = options || {};
+
+                    if (safeOptions.domOverlay && safeOptions.domOverlay.root) {
+                        // Create shallow copy to avoid mutating the original object passed by the web app
+                        safeOptions = Object.assign({}, safeOptions);
+                        safeOptions.domOverlay = Object.assign({}, safeOptions.domOverlay);
+                        delete safeOptions.domOverlay.root;
+                    }
+
                     window.webkit.messageHandlers.requestSession.postMessage({
-                        options: options || {},
-                        data_callback: "onNativeDataUpdate", // Ensure this matches callback expectation
+                        options: safeOptions,
+                        data_callback: "onNativeDataUpdate",
                         callback: callbackName
                     });
                 } else {
-                    console.error("[Bridge] WebKit MessageHandler missing");
+                    console.error("[Bridge] Error: WebKit MessageHandler missing or requestSession handler not found");
                     resolve();
                 }
             });
+            console.log("[Bridge] Handshake complete. Setting background transparent.");
             document.body.style.background = 'transparent';
             if (document.documentElement) document.documentElement.style.background = 'transparent';
+        } else {
+            console.log(`[Bridge] Mode is ${mode}, skipping native handshake.`);
         }
+
+        console.log("[Bridge] Calling original IWER requestSession...");
         return originalRequestSession(mode, options);
     };
 })();
