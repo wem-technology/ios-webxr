@@ -8581,7 +8581,6 @@ XRSession.prototype.requestHitTestSource = function (options) {
     const { XRDevice, XRSpace, XRHitTestResult, XRFrame, XRSession } = window.iwer;
 
     // --- Math Helpers ---
-
     function decomposeMatrix(m) {
         if (!m || m.length < 16) return null;
         const px = m[12], py = m[13], pz = m[14];
@@ -8700,7 +8699,11 @@ XRSession.prototype.requestHitTestSource = function (options) {
 
     const device = new ARKitXRDevice();
 
-    // Override targetRayMode for 'none' controller (Screen interaction)
+    // IWER defaults IPD to 0.063, which offsets the camera left/right for stereo.
+    // In AR on mobile, we want the camera to be exactly at the device center (0,0,0) to match the video feed.
+    device.ipd = 0;
+    device.stereoEnabled = false;
+
     if (device.controllers && device.controllers.none) {
         Object.defineProperty(device.controllers.none.inputSource, 'targetRayMode', {
             get: () => 'screen',
@@ -8711,9 +8714,6 @@ XRSession.prototype.requestHitTestSource = function (options) {
     device.installRuntime();
     console.log("[Bridge] IWER Runtime Installed");
 
-    // --- Native Hit Test Implementation ---
-
-    // 1. Hook requestHitTestSource to flag it for native handling
     const originalRequestHitTestSource = XRSession.prototype.requestHitTestSource;
     XRSession.prototype.requestHitTestSource = function (options) {
         return originalRequestHitTestSource.call(this, options).then(source => {
@@ -8776,7 +8776,6 @@ XRSession.prototype.requestHitTestSource = function (options) {
     let camPos = { x: 0, y: 0, z: 0 };
     let camQuat = { x: 0, y: 0, z: 0, w: 1 };
 
-    // Persistent callback to avoid memory leaks
     window.updateNativeHitTestResults = function (results) {
         device.nativeHitTestResults = results || [];
     };
@@ -8784,17 +8783,14 @@ XRSession.prototype.requestHitTestSource = function (options) {
     function arKitDriverLoop() {
         requestAnimationFrame(arKitDriverLoop);
 
-        // -- Hit Test Request --
-        // Check if message handler exists
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hitTest) {
-            // If touching, use touch coord. If not, use center screen (viewer gaze).
             const targetX = touchState.active ? (touchState.x / window.innerWidth) : 0.5;
             const targetY = touchState.active ? (touchState.y / window.innerHeight) : 0.5;
 
             window.webkit.messageHandlers.hitTest.postMessage({
                 x: targetX,
                 y: targetY,
-                callback: "updateNativeHitTestResults" // Send string name of persistent function
+                callback: "updateNativeHitTestResults"
             });
         }
 
@@ -8819,7 +8815,7 @@ XRSession.prototype.requestHitTestSource = function (options) {
             if (!isNaN(fovy)) device.fovy = fovy;
         }
 
-        // 2. Input Raycasting for 'none' controller (screen interaction)
+        // 2. Input Raycasting
         if (device.controllers && device.controllers.none) {
 
             // Align origin with camera
@@ -8834,7 +8830,6 @@ XRSession.prototype.requestHitTestSource = function (options) {
             const useTouchRay = touchState.active || (framesSinceRelease < 1);
 
             if (useTouchRay && projMat) {
-                // Calculate ray from screen tap
                 const oneOverScaleX = 1.0 / projMat[0];
                 const oneOverScaleY = 1.0 / projMat[5];
 
