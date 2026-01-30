@@ -8742,7 +8742,8 @@ XRSession.prototype.requestHitTestSource = function (options) {
     // --- Input Tracking ---
 
     let touchState = { active: false, x: 0, y: 0 };
-    // Counter to keep the ray at the touch position for a few frames after release
+    // Counter to ensure we have a valid 0 -> 1 transition for the trigger
+    let touchActiveFrames = 0;
     let framesSinceRelease = 100;
 
     function updateTouch(e, type) {
@@ -8758,13 +8759,9 @@ XRSession.prototype.requestHitTestSource = function (options) {
 
         if (isActive) {
             framesSinceRelease = 0;
-        }
-
-        // Trigger update on 'none' controller (the screen input source)
-        if (device && device.controllers && device.controllers.none) {
-            const val = isActive ? 1.0 : 0.0;
-            device.controllers.none.updateButtonValue('trigger', val);
-            device.controllers.none.updateButtonTouch('trigger', isActive);
+        } else {
+            // Reset active frames immediately on release
+            touchActiveFrames = 0;
         }
     }
 
@@ -8783,20 +8780,18 @@ XRSession.prototype.requestHitTestSource = function (options) {
     function arKitDriverLoop() {
         requestAnimationFrame(arKitDriverLoop);
 
+        // This ensures Viewer Space hit tests (Reticles) stay centered.
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hitTest) {
-            const targetX = touchState.active ? (touchState.x / window.innerWidth) : 0.5;
-            const targetY = touchState.active ? (touchState.y / window.innerHeight) : 0.5;
-
             window.webkit.messageHandlers.hitTest.postMessage({
-                x: targetX,
-                y: targetY,
+                x: 0.5,
+                y: 0.5,
                 callback: "updateNativeHitTestResults"
             });
         }
 
         if (!window.NativeARData) return;
 
-        // 1. Update Camera/Headset Pose
+        // 2. Update Camera/Headset Pose
         const camMat = window.NativeARData.camera_transform;
         const projMat = window.NativeARData.projection_camera;
 
@@ -8815,24 +8810,41 @@ XRSession.prototype.requestHitTestSource = function (options) {
             if (!isNaN(fovy)) device.fovy = fovy;
         }
 
-        // 2. Input Raycasting
+        // 3. Input Processing (Controller follows Finger)
         if (device.controllers && device.controllers.none) {
 
-            // Align origin with camera
+            if (touchState.active) {
+                touchActiveFrames++;
+            }
+
+            // Keep connected while touching or for a few frames after release 
+            // (allows 'selectend' event to process before controller disappears)
+            const isConnected = touchState.active || (framesSinceRelease < 1);
+            device.controllers.none.connected = isConnected;
+
+            // Position: Always align with camera origin
             device.controllers.none.position.set(
                 camPos.x,
                 camPos.y,
                 camPos.z
             );
 
-            device.controllers.none.connected = true;
+            // Trigger Logic: Force 0.0 for first 2 frames of touch to guarantee 
+            // Three.js registers the transition from 0 -> 1 (firing selectstart).
+            let triggerVal = 0.0;
+            if (touchState.active && touchActiveFrames > 2) {
+                triggerVal = 1.0;
+            }
 
-            const useTouchRay = touchState.active || (framesSinceRelease < 1);
+            device.controllers.none.updateButtonValue('trigger', triggerVal);
+            device.controllers.none.updateButtonTouch('trigger', touchState.active);
 
-            if (useTouchRay && projMat) {
+            // Orientation: Raycast from the specific Touch Coordinates
+            if (isConnected && projMat && touchState.active) {
                 const oneOverScaleX = 1.0 / projMat[0];
                 const oneOverScaleY = 1.0 / projMat[5];
 
+                // Map screen pixels to Normalized Device Coordinates (-1 to 1)
                 const ndcX = (touchState.x / window.innerWidth) * 2.0 - 1.0;
                 const ndcY = 1.0 - (touchState.y / window.innerHeight) * 2.0;
 
@@ -8843,18 +8855,20 @@ XRSession.prototype.requestHitTestSource = function (options) {
                 };
 
                 const len = Math.sqrt(rayLocal.x * rayLocal.x + rayLocal.y * rayLocal.y + rayLocal.z * rayLocal.z);
-                rayLocal.x /= len;
-                rayLocal.y /= len;
-                rayLocal.z /= len;
+                if (len > 0.0001) {
+                    rayLocal.x /= len;
+                    rayLocal.y /= len;
+                    rayLocal.z /= len;
 
-                const rayWorld = applyQuat(rayLocal, camQuat);
-                const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
+                    const rayWorld = applyQuat(rayLocal, camQuat);
+                    const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
 
-                device.controllers.none.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
-
-            } else {
-                // Default to Camera forward if no touch
-                device.controllers.none.quaternion.set(camQuat.x, camQuat.y, camQuat.z, camQuat.w);
+                    device.controllers.none.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
+                }
+            } else if (isConnected) {
+                // If connected but not actively touching (released frame window),
+                // keep previous orientation or fallback to camera forward.
+                // We leave it as-is to prevent "snapping back" artifacts during the release frames.
             }
         }
 
