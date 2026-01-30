@@ -8535,7 +8535,8 @@ class ActionRecorder {
 window.iwer = {
     XRDevice, XRSystem, XRSession, XRFrame, XRSpace, XRReferenceSpace,
     XRView, XRViewport, XRRigidTransform, XRPose, XRViewerPose,
-    XRInputSource, XRWebGLLayer, XRReferenceSpaceEvent, XRSessionEvent
+    XRInputSource, XRWebGLLayer, XRReferenceSpaceEvent, XRSessionEvent,
+    XRHitTestResult
 };
 
 /**
@@ -8558,6 +8559,15 @@ window.iwer = {
         return originalGetContext.call(this, type, attributes);
     };
 })();
+
+// Monkey patch XRSession.requestHitTestSource to bypass IWER SEM checks
+XRSession.prototype.requestHitTestSource = function (options) {
+    return Promise.resolve({
+        _isNativeCompatible: true,
+        cancel: () => {
+        }
+    });
+};
 
 // --- 2. ARKit Bridge for IWER ---
 (function () {
