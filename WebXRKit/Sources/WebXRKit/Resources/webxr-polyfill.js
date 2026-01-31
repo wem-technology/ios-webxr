@@ -8569,6 +8569,39 @@ XRSession.prototype.requestHitTestSource = function (options) {
     });
 };
 
+const originalGetViewerPose = XRFrame.prototype.getViewerPose;
+
+XRFrame.prototype.getViewerPose = function (refSpace) {
+    // 1. Call original implementation
+    const pose = originalGetViewerPose.call(this, refSpace);
+    if (!pose) return null;
+
+    // 2. Fix: Get the session from the Frame, not the View
+    const session = this.session;
+
+    // 3. Force Monoscopic if currently Stereo (2 views)
+    if (pose.views.length === 2) {
+
+        // We use the Left projection matrix. 
+        // Since device.stereoEnabled = false in the bridge, this matrix 
+        // already has the correct full-screen aspect ratio.
+        let projMat = pose.views[0].projectionMatrix;
+
+        // Optional: Inject latest native ARKit matrix if available
+        if (window.NativeARData && window.NativeARData.projection_camera) {
+            projMat = new Float32Array(window.NativeARData.projection_camera);
+        }
+
+        // 4. Create single view ('none') associated with the correct session
+        const monoView = new XRView('none', projMat, pose.transform, session);
+
+        // 5. Return new pose with single view
+        return new XRViewerPose(pose.transform, [monoView], pose.emulatedPosition);
+    }
+
+    return pose;
+};
+
 // --- 2. ARKit Bridge for IWER ---
 (function () {
     console.log("[Bridge] Initializing IWER ARKit Bridge...");
