@@ -8724,18 +8724,16 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                     'inline': 'opaque'
                 },
                 interactionMode: 'screen-space',
-                userAgent: navigator.userAgent || 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1'
+                userAgent: navigator.userAgent || 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+                // probably not needed after mono view fix
+                ipd: 0,
+                headsetPosition: new Vector3(0, 0, 0),
             });
             this.nativeHitTestResults = [];
         }
     }
 
     const device = new ARKitXRDevice();
-
-    // IWER defaults IPD to 0.063, which offsets the camera left/right for stereo.
-    // In AR on mobile, we want the camera to be exactly at the device center (0,0,0) to match the video feed.
-    device.ipd = 0;
-    device.stereoEnabled = false;
 
     if (device.controllers && device.controllers.none) {
         Object.defineProperty(device.controllers.none.inputSource, 'targetRayMode', {
