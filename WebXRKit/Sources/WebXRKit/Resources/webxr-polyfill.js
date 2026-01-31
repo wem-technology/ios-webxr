@@ -8735,6 +8735,8 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
 
     const device = new ARKitXRDevice();
 
+    device.canvasContainer.style.zIndex = '-1';
+
     if (device.controllers && device.controllers.none) {
         Object.defineProperty(device.controllers.none.inputSource, 'targetRayMode', {
             get: () => 'screen',
