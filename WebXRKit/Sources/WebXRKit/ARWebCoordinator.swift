@@ -95,6 +95,12 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
             config.videoFormat = currentDevice
         }
         arView?.session.run(config, options: [.resetTracking, .removeExistingAnchors])
+
+        // Match WebXR's y=0 at device floor level
+        var translation = matrix_identity_float4x4
+        translation.columns.3.y = -1.6
+
+        arView?.session.setWorldOrigin(relativeTransform: translation)
         isSessionRunning = true
     }
 
