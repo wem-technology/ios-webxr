@@ -8954,8 +8954,15 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                 }
             });
             console.log("[Bridge] Handshake complete. Setting background transparent.");
+
             document.body.style.background = 'transparent';
-            if (document.documentElement) document.documentElement.style.background = 'transparent';
+            if (document.documentElement) {
+                document.documentElement.style.background = 'transparent';
+            }
+
+            if (options && options.domOverlay && options.domOverlay.root) {
+                options.domOverlay.root.style.background = 'transparent';
+            }
         } else {
             console.log(`[Bridge] Mode is ${mode}, skipping native handshake.`);
         }
