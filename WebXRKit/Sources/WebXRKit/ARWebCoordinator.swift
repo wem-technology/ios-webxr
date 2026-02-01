@@ -18,7 +18,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
     public var onNavigationChanged: (() -> Void)?
 
     private let cameraProcessor = ARCameraFrameProcessor()
-
     private var isJsProcessingFrame = false
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -55,21 +54,27 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
                 let callbackName = body["data_callback"] as? String
             {
                 self.dataCallbackName = callbackName
-
                 self.isCameraAccessRequested = options["computer_vision_data"] as? Bool ?? false
 
                 self.startARSession(options: options)
+
+                // 1. Update UI (Instant transaction)
                 self.onSessionActiveChanged?(true)
 
-                if let responseCallback = body["callback"] as? String {
-                    replyToJS(
-                        callback: responseCallback,
-                        data: [
-                            "cameraAccess": self.isCameraAccessRequested,
-                            "worldAccess": true,
-                            "webXRAccess": true,
-                        ]
-                    )
+                // 2. Wait for safe area transition to complete before confirming to JS
+                // Yes, hard-coding a magic delay sucks, but couldn't get a callback after animation working
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self else { return }
+                    if let responseCallback = body["callback"] as? String {
+                        self.replyToJS(
+                            callback: responseCallback,
+                            data: [
+                                "cameraAccess": self.isCameraAccessRequested,
+                                "worldAccess": true,
+                                "webXRAccess": true,
+                            ]
+                        )
+                    }
                 }
             }
         case "stopAR":
@@ -90,13 +95,12 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
     public func startARSession(options: [String: Any]) {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
-        // Enable auto-focus if available
+
         if let currentDevice = ARWorldTrackingConfiguration.supportedVideoFormats.first {
             config.videoFormat = currentDevice
         }
         arView?.session.run(config, options: [.resetTracking, .removeExistingAnchors])
 
-        // Match WebXR's y=0 at device floor level
         var translation = matrix_identity_float4x4
         translation.columns.3.y = -1.6
 
@@ -124,7 +128,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
             y: CGFloat(y) * arView.bounds.height
         )
 
-        // 1. Raycast against existing planes (Geometry)
         var results: [ARRaycastResult] = []
 
         if let query = arView.raycastQuery(
@@ -133,7 +136,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
             results = arView.session.raycast(query)
         }
 
-        // 2. If no geometry, raycast against estimated planes
         if results.isEmpty {
             if let query = arView.raycastQuery(
                 from: point, allowing: .estimatedPlane, alignment: .any)
@@ -174,7 +176,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
             let orientation = UIInterfaceOrientation.portrait
             let viewportSize = webView.bounds.size
 
-            // 1. Calculate Matrices
             let viewMatrix = frame.camera.viewMatrix(for: orientation)
             let cameraTransform = viewMatrix.inverse
             let projMatrix = frame.camera.projectionMatrix(
@@ -184,7 +185,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
                 zFar: 1000
             )
 
-            // 2. Build JS Command
             var jsCommand = "if(!window.NativeARData){window.NativeARData={};}"
             jsCommand += "window.NativeARData.timestamp = \(frame.timestamp * 1000);"
             jsCommand +=
@@ -195,7 +195,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
             jsCommand +=
                 "window.NativeARData.projection_camera = \(fastFloatArrayToString(projMatrix));"
 
-            // 3. Video Processing (if requested)
             let conversionResult = cameraProcessor.process(
                 frame: frame,
                 viewportSize: viewportSize,

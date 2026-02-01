@@ -2,41 +2,31 @@ import SwiftUI
 import WebXRKit
 
 struct ContentView: View {
-
     @Binding var externalLoadURL: URL?
 
-    // Helper: Read URL from Info.plist (Injected by XCodeGen)
     private static let startURL: String = {
         return Bundle.main.object(forInfoDictionaryKey: "WB_START_URL") as? String
             ?? "https://helloxr.app"
     }()
 
-    // Navigation State initialized with the plist value
     @State private var urlString: String = ContentView.startURL
     @State private var navAction: WebViewNavigationAction = .load(
         URL(string: ContentView.startURL)!)
-
-    // Web State
     @State private var isARActive: Bool = false
     @State private var canGoBack: Bool = false
     @State private var canGoForward: Bool = false
-
-    // UI State
     @State private var isNavExpanded: Bool = false
 
-    // Custom Color: #272727 (RGB 39, 39, 39)
     private let safeAreaColor = Color(red: 39 / 255, green: 39 / 255, blue: 39 / 255)
 
     var body: some View {
+        // 1. Background Color
         ZStack(alignment: .top) {
-
-            // 1. Background Color
             safeAreaColor
                 .edgesIgnoringSafeArea(.all)
 
             // 2. Main Content
             ZStack(alignment: .top) {
-                // AR Web View
                 ARWebView(
                     action: $navAction,
                     isARActive: $isARActive,
@@ -44,7 +34,6 @@ struct ContentView: View {
                     canGoBack: $canGoBack,
                     canGoForward: $canGoForward
                 )
-                .edgesIgnoringSafeArea(isARActive ? .all : [])
 
                 // 3. UI Overlay
                 if !isARActive {
@@ -75,7 +64,6 @@ struct ContentView: View {
         }
         .statusBar(hidden: isARActive)
         .animation(.spring(), value: isNavExpanded)
-        .animation(.easeInOut, value: isARActive)
         .onChange(of: externalLoadURL) { newURL in
             if let validURL = newURL {
                 urlString = validURL.absoluteString
@@ -139,7 +127,6 @@ struct ContentView: View {
             .background(Color.white)
             .cornerRadius(8)
 
-            // Go Button
             Button(action: {
                 processAndLoad()
             }) {
@@ -152,7 +139,6 @@ struct ContentView: View {
                     .cornerRadius(8)
             }
 
-            // Close Navbar Button
             Button(action: {
                 isNavExpanded = false
             }) {
@@ -174,7 +160,9 @@ struct ContentView: View {
         VStack {
             HStack {
                 Button(action: {
-                    withAnimation {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
                         isARActive = false
                     }
                 }) {
@@ -205,8 +193,6 @@ struct ContentView: View {
     private func processAndLoad() {
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-
-        // Auto-collapse the navbar when loading
         isNavExpanded = false
 
         let rawInput = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
