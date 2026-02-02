@@ -54,7 +54,13 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
                 let callbackName = body["data_callback"] as? String
             {
                 self.dataCallbackName = callbackName
-                self.isCameraAccessRequested = options["computer_vision_data"] as? Bool ?? false
+                let requiredFeatures = options["requiredFeatures"] as? [String] ?? []
+                let optionalFeatures = options["optionalFeatures"] as? [String] ?? []
+                let allFeatures = requiredFeatures + optionalFeatures
+
+                // Enable camera processor if requested via features OR the legacy explicit flag
+                self.isCameraAccessRequested =
+                    allFeatures.contains("camera-access")
 
                 self.startARSession(options: options)
 

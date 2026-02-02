@@ -8564,39 +8564,111 @@ window.iwer = {
 XRSession.prototype.requestHitTestSource = function (options) {
     return Promise.resolve({
         _isNativeCompatible: true,
-        cancel: () => {
-        }
+        cancel: () => { }
     });
 };
+
+// --- Camera Access Polyfill Helpers ---
+const cameraImageCache = new Image();
+let cameraImageReady = false;
+let lastVideoBase64 = "";
+
+// Global map to store textures per WebGL Context to avoid recreating them per frame
+const glCameraTextureMap = new WeakMap();
+
+function updateCameraTexture(gl, base64Data) {
+    if (base64Data === lastVideoBase64) return; // No new frame
+    lastVideoBase64 = base64Data;
+
+    cameraImageCache.src = "data:image/jpeg;base64," + base64Data;
+
+    // We can only upload to GPU once image is decoded
+    cameraImageCache.onload = () => {
+        cameraImageReady = true;
+    };
+}
+
+function getWebGLCameraTexture(gl) {
+    if (!cameraImageReady) return null;
+
+    let texture = glCameraTextureMap.get(gl);
+
+    if (!texture) {
+        texture = gl.createTexture();
+        glCameraTextureMap.set(gl, texture);
+
+        const prevTexture = gl.getParameter(gl.TEXTURE_BINDING_2D);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.bindTexture(gl.TEXTURE_2D, prevTexture);
+    }
+
+    // Upload new data
+    const prevTexture = gl.getParameter(gl.TEXTURE_BINDING_2D);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    // Unpack flip Y is usually needed for WebGL vs CoreImage orientation differences
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cameraImageCache);
+    gl.bindTexture(gl.TEXTURE_2D, prevTexture);
+
+    return texture;
+}
+
+// --- XRWebGLBinding Polyfill Injection ---
+// We inject/extend this to support getCameraImage
+if (!window.XRWebGLBinding) {
+    window.XRWebGLBinding = function (session, context) {
+        this.session = session;
+        this.context = context;
+    }
+}
+
+
+// --- View / Pose Overrides ---
 
 const originalGetViewerPose = XRFrame.prototype.getViewerPose;
 
 XRFrame.prototype.getViewerPose = function (refSpace) {
-    // 1. Call original implementation
     const pose = originalGetViewerPose.call(this, refSpace);
     if (!pose) return null;
 
-    // 2. Fix: Get the session from the Frame, not the View
     const session = this.session;
 
-    // 3. Force Monoscopic if currently Stereo (2 views)
-    if (pose.views.length === 2) {
+    // Check if camera access was requested in this session
+    const features = session.enabledFeatures || [];
+    const hasCameraAccess = features.includes('camera-access');
 
-        // We use the Left projection matrix. 
-        // Since device.stereoEnabled = false in the bridge, this matrix 
-        // already has the correct full-screen aspect ratio.
+    // Force Monoscopic
+    if (pose.views.length === 2) {
         let projMat = pose.views[0].projectionMatrix;
 
-        // Optional: Inject latest native ARKit matrix if available
+        // Inject latest native ARKit projection matrix
         if (window.NativeARData && window.NativeARData.projection_camera) {
             projMat = new Float32Array(window.NativeARData.projection_camera);
         }
 
-        // 4. Create single view ('none') associated with the correct session
         const monoView = new XRView('none', projMat, pose.transform, session);
 
-        // 5. Return new pose with single view
+        // --- Inject Camera Object ---
+        if (hasCameraAccess && window.NativeARData && window.NativeARData.video_width) {
+            monoView.camera = {
+                width: window.NativeARData.video_width,
+                height: window.NativeARData.video_height,
+            };
+        }
+
         return new XRViewerPose(pose.transform, [monoView], pose.emulatedPosition);
+    }
+
+    // Also inject camera if not stereo (just in case IWER defaults change)
+    if (hasCameraAccess && pose.views.length > 0 && window.NativeARData && window.NativeARData.video_width) {
+        pose.views[0].camera = {
+            width: window.NativeARData.video_width,
+            height: window.NativeARData.video_height,
+        };
     }
 
     return pose;
@@ -8703,7 +8775,6 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                     profileId: '',
                     fallbackProfileIds: [],
                     layout: {
-                        // 'none' handedness is used for the Viewer/Screen
                         none: {
                             gamepad: { mapping: 'xr-standard', buttons: [{ id: 'trigger', type: 'analog', eventTrigger: 'select' }], axes: [] },
                             numHapticActuators: 0
@@ -8714,9 +8785,11 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                 },
                 supportedSessionModes: ['inline', 'immersive-ar'],
                 internalNominalFrameRate: 60,
+                // Add 'camera-access' here to allow navigator.xr.requestSession to pass validation
                 supportedFeatures: [
                     'viewer', 'local', 'local-floor', 'bounded-floor',
-                    'hit-test', 'dom-overlay', 'anchors', 'plane-detection'
+                    'hit-test', 'dom-overlay', 'anchors', 'plane-detection',
+                    'camera-access'
                 ],
                 isSystemKeyboardSupported: false,
                 environmentBlendModes: {
@@ -8725,7 +8798,6 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                 },
                 interactionMode: 'screen-space',
                 userAgent: navigator.userAgent || 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-                // probably not needed after mono view fix
                 ipd: 0,
                 headsetPosition: new Vector3(0, 0, 0),
             });
@@ -8734,7 +8806,6 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
     }
 
     const device = new ARKitXRDevice();
-
     device.canvasContainer.style.zIndex = '-1';
 
     if (device.controllers && device.controllers.none) {
@@ -8744,8 +8815,15 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
         });
     }
 
-    device.installRuntime();
+    device.installRuntime({ polyfillLayers: true });
     console.log("[Bridge] IWER Runtime Installed");
+
+
+    window.XRWebGLBinding.prototype.getCameraImage = function (camera) {
+        if (!camera) return null;
+        // Return the specific texture for this context
+        return getWebGLCameraTexture(this.context);
+    };
 
     const originalRequestHitTestSource = XRSession.prototype.requestHitTestSource;
     XRSession.prototype.requestHitTestSource = function (options) {
@@ -8755,16 +8833,13 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
         });
     };
 
-    // 2. Override getHitTestResults to return data from ARKit
     XRFrame.prototype.getHitTestResults = function (hitTestSource) {
         if (!hitTestSource._isNativeCompatible) return [];
         const globalSpace = device.globalSpace;
 
         if (device.nativeHitTestResults && device.nativeHitTestResults.length > 0) {
             return device.nativeHitTestResults.map(hit => {
-                // 'hit.world_transform' comes as array [16] column-major
                 const matrix = new Float32Array(hit.world_transform);
-                // Create an IWER XRSpace from the global space + offset matrix
                 const offsetSpace = new XRSpace(globalSpace, matrix);
                 return new XRHitTestResult(this, offsetSpace);
             });
@@ -8775,25 +8850,20 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
     // --- Input Tracking ---
 
     let touchState = { active: false, x: 0, y: 0 };
-    // Counter to ensure we have a valid 0 -> 1 transition for the trigger
     let touchActiveFrames = 0;
     let framesSinceRelease = 100;
 
     function updateTouch(e, type) {
         const isActive = (type === 'start' || type === 'move');
         touchState.active = isActive;
-
         const touchList = isActive ? e.touches : e.changedTouches;
-
         if (touchList && touchList.length > 0) {
             touchState.x = touchList[0].clientX;
             touchState.y = touchList[0].clientY;
         }
-
         if (isActive) {
             framesSinceRelease = 0;
         } else {
-            // Reset active frames immediately on release
             touchActiveFrames = 0;
         }
     }
@@ -8813,7 +8883,6 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
     function arKitDriverLoop() {
         requestAnimationFrame(arKitDriverLoop);
 
-        // This ensures Viewer Space hit tests (Reticles) stay centered.
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hitTest) {
             window.webkit.messageHandlers.hitTest.postMessage({
                 x: 0.5,
@@ -8824,7 +8893,13 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
 
         if (!window.NativeARData) return;
 
-        // 2. Update Camera/Headset Pose
+        // --- Handle Camera Data for VPS ---
+        if (window.NativeARData.video_updated && window.NativeARData.video_data) {
+            // This is handled by the global WebGL context map in getWebGLCameraTexture
+            // We just update the source image here
+            updateCameraTexture(null, window.NativeARData.video_data);
+        }
+
         const camMat = window.NativeARData.camera_transform;
         const projMat = window.NativeARData.projection_camera;
 
@@ -8843,27 +8918,14 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
             if (!isNaN(fovy)) device.fovy = fovy;
         }
 
-        // 3. Input Processing (Controller follows Finger)
         if (device.controllers && device.controllers.none) {
-
             if (touchState.active) {
                 touchActiveFrames++;
             }
-
-            // Keep connected while touching or for a few frames after release 
-            // (allows 'selectend' event to process before controller disappears)
             const isConnected = touchState.active || (framesSinceRelease < 1);
             device.controllers.none.connected = isConnected;
+            device.controllers.none.position.set(camPos.x, camPos.y, camPos.z);
 
-            // Position: Always align with camera origin
-            device.controllers.none.position.set(
-                camPos.x,
-                camPos.y,
-                camPos.z
-            );
-
-            // Trigger Logic: Force 0.0 for first 2 frames of touch to guarantee 
-            // Three.js registers the transition from 0 -> 1 (firing selectstart).
             let triggerVal = 0.0;
             if (touchState.active && touchActiveFrames > 2) {
                 triggerVal = 1.0;
@@ -8872,12 +8934,9 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
             device.controllers.none.updateButtonValue('trigger', triggerVal);
             device.controllers.none.updateButtonTouch('trigger', touchState.active);
 
-            // Orientation: Raycast from the specific Touch Coordinates
             if (isConnected && projMat && touchState.active) {
                 const oneOverScaleX = 1.0 / projMat[0];
                 const oneOverScaleY = 1.0 / projMat[5];
-
-                // Map screen pixels to Normalized Device Coordinates (-1 to 1)
                 const ndcX = (touchState.x / window.innerWidth) * 2.0 - 1.0;
                 const ndcY = 1.0 - (touchState.y / window.innerHeight) * 2.0;
 
@@ -8886,22 +8945,15 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                     y: ndcY * oneOverScaleY,
                     z: -1.0
                 };
-
                 const len = Math.sqrt(rayLocal.x * rayLocal.x + rayLocal.y * rayLocal.y + rayLocal.z * rayLocal.z);
                 if (len > 0.0001) {
                     rayLocal.x /= len;
                     rayLocal.y /= len;
                     rayLocal.z /= len;
-
                     const rayWorld = applyQuat(rayLocal, camQuat);
                     const ctrlQuat = setQuatFromUnitVectors({ x: 0, y: 0, z: -1 }, rayWorld);
-
                     device.controllers.none.quaternion.set(ctrlQuat.x, ctrlQuat.y, ctrlQuat.z, ctrlQuat.w);
                 }
-            } else if (isConnected) {
-                // If connected but not actively touching (released frame window),
-                // keep previous orientation or fallback to camera forward.
-                // We leave it as-is to prevent "snapping back" artifacts during the release frames.
             }
         }
 
@@ -8920,28 +8972,24 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
         console.log(`[Bridge] navigator.xr.requestSession called. Mode: ${mode}`);
 
         if (mode === 'immersive-ar') {
-            console.log("[Bridge] immersive-ar detected. initiating native handshake...");
             await new Promise((resolve) => {
                 const callbackName = "onARStart_" + Math.random().toString(36).substr(2);
-                console.log(`[Bridge] Creating callback: ${callbackName}`);
-
                 window[callbackName] = () => {
-                    console.log("[Bridge] Native AR Start Confirmed (Callback triggered).");
                     delete window[callbackName];
                     resolve();
                 };
 
                 if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.requestSession) {
-                    console.log("[Bridge] Posting 'requestSession' message to Native...");
-
                     let safeOptions = options || {};
-
                     if (safeOptions.domOverlay && safeOptions.domOverlay.root) {
-                        // Create shallow copy to avoid mutating the original object passed by the web app
                         safeOptions = Object.assign({}, safeOptions);
                         safeOptions.domOverlay = Object.assign({}, safeOptions.domOverlay);
                         delete safeOptions.domOverlay.root;
                     }
+
+                    // Pass requiredFeatures to Swift so it knows to enable CV Data
+                    if (!safeOptions.requiredFeatures) safeOptions.requiredFeatures = [];
+                    if (!safeOptions.optionalFeatures) safeOptions.optionalFeatures = [];
 
                     window.webkit.messageHandlers.requestSession.postMessage({
                         options: safeOptions,
@@ -8949,25 +8997,17 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                         callback: callbackName
                     });
                 } else {
-                    console.error("[Bridge] Error: WebKit MessageHandler missing or requestSession handler not found");
                     resolve();
                 }
             });
-            console.log("[Bridge] Handshake complete. Setting background transparent.");
 
             document.body.style.background = 'transparent';
-            if (document.documentElement) {
-                document.documentElement.style.background = 'transparent';
-            }
-
+            if (document.documentElement) document.documentElement.style.background = 'transparent';
             if (options && options.domOverlay && options.domOverlay.root) {
                 options.domOverlay.root.style.background = 'transparent';
             }
-        } else {
-            console.log(`[Bridge] Mode is ${mode}, skipping native handshake.`);
         }
 
-        console.log("[Bridge] Calling original IWER requestSession...");
         return originalRequestSession(mode, options);
     };
 })();
