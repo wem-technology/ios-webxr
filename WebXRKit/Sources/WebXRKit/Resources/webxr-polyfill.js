@@ -8808,6 +8808,74 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
     const device = new ARKitXRDevice();
     device.canvasContainer.style.zIndex = '-1';
 
+    const originalUpdateRenderState = window.iwer.XRSession.prototype.updateRenderState;
+    window.iwer.XRSession.prototype.updateRenderState = function (state) {
+        // 1. Call original IWER implementation
+        originalUpdateRenderState.call(this, state);
+
+        // 2. Execute DOM Overlay logic if we are in AR and setting a baseLayer
+        if (this.mode === 'immersive-ar' && state && state.baseLayer && !this._domOverlayConfigured) {
+            this._domOverlayConfigured = true;
+
+            // Save original backgrounds
+            this._prevHtmlBg = document.documentElement.style.backgroundColor;
+            this._prevBodyBg = document.body.style.backgroundColor;
+
+            // Make transparent for ARKit camera feed
+            document.documentElement.style.backgroundColor = "transparent";
+            document.body.style.backgroundColor = "transparent";
+
+            // Hide existing DOM elements to prevent UI overlap
+            const canvas = state.baseLayer.context.canvas;
+            const root = this._domOverlayRoot; // Captured in requestSession hook below
+            const children = document.body.children;
+
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+
+                // Check if child is essential (CanvasContainer, Actual Canvas, or Overlay Root)
+                // Note: device.canvasContainer is available via closure from this bridge scope
+                if (child !== device.canvasContainer &&
+                    child !== canvas &&
+                    (!root || (!root.contains(child) && child !== root))) {
+
+                    if (!child._displayChanged) {
+                        // Save original display state and hide
+                        child._displayWas = window.getComputedStyle(child).display;
+                        child._displayChanged = true;
+                        child.style.display = "none";
+                    }
+                }
+            }
+        }
+    };
+
+    // Patch end() to restore visibility
+    const originalEnd = window.iwer.XRSession.prototype.end;
+    window.iwer.XRSession.prototype.end = function () {
+        // 1. Call original end
+        return originalEnd.call(this).then(() => {
+            // 2. Restore DOM if we configured the overlay
+            if (this.mode === 'immersive-ar' && this._domOverlayConfigured) {
+                // Restore backgrounds
+                document.documentElement.style.backgroundColor = this._prevHtmlBg || "";
+                document.body.style.backgroundColor = this._prevBodyBg || "";
+
+                // Restore hidden elements
+                const children = document.body.children;
+                for (let i = 0; i < children.length; i++) {
+                    const child = children[i];
+                    if (child._displayChanged) {
+                        child.style.display = child._displayWas;
+                        delete child._displayWas;
+                        delete child._displayChanged;
+                    }
+                }
+                this._domOverlayConfigured = false;
+            }
+        });
+    };
+
     if (device.controllers && device.controllers.none) {
         Object.defineProperty(device.controllers.none.inputSource, 'targetRayMode', {
             get: () => 'screen',
@@ -9000,14 +9068,15 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
                     resolve();
                 }
             });
-
-            document.body.style.background = 'transparent';
-            if (document.documentElement) document.documentElement.style.background = 'transparent';
-            if (options && options.domOverlay && options.domOverlay.root) {
-                options.domOverlay.root.style.background = 'transparent';
-            }
         }
 
-        return originalRequestSession(mode, options);
+        const session = await originalRequestSession(mode, options);
+
+        if (mode === 'immersive-ar' && options && options.domOverlay && options.domOverlay.root) {
+            // Attach the root to the session for the updateRenderState patch to find
+            session._domOverlayRoot = options.domOverlay.root;
+        }
+
+        return session;
     };
 })();
