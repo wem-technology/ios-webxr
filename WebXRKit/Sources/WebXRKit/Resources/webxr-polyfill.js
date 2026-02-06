@@ -8808,6 +8808,35 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
     const device = new ARKitXRDevice();
     device.canvasContainer.style.zIndex = '-1';
 
+    const pDeviceSymbol = Object.getOwnPropertySymbols(device).find(s => s.toString().includes('xr-device'));
+
+    // TODO: might be a better way than internal reflection
+    if (pDeviceSymbol) {
+        const originalOnBaseLayerSet = device[pDeviceSymbol].onBaseLayerSet;
+
+        // Monkey-patch the device's handler to respect devicePixelRatio (Retina screens)
+        device[pDeviceSymbol].onBaseLayerSet = function (baseLayer) {
+            // Run IWER's original logic (DOM parenting, z-index setup)
+            if (originalOnBaseLayerSet) originalOnBaseLayerSet.call(this, baseLayer);
+
+            if (!baseLayer) return;
+
+            const canvas = baseLayer.context.canvas;
+            const dpr = window.devicePixelRatio || 1;
+
+            // 1. Scale the internal backing store to native resolution (fixes blurriness)
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+
+            // 2. Force the visual display size to match logical CSS pixels (fixes layout/FOV scale)
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+        };
+    } else {
+        console.warn("[Bridge] Could not find P_DEVICE symbol. DPI scaling may be incorrect.");
+    }
+
+
     const originalUpdateRenderState = window.iwer.XRSession.prototype.updateRenderState;
     window.iwer.XRSession.prototype.updateRenderState = function (state) {
         // 1. Call original IWER implementation
