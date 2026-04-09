@@ -8936,9 +8936,24 @@ XRFrame.prototype.getViewerPose = function (refSpace) {
         }
     }
 
-    window.addEventListener('touchstart', (e) => updateTouch(e, 'start'), { passive: false });
-    window.addEventListener('touchmove', (e) => updateTouch(e, 'move'), { passive: false });
-    window.addEventListener('touchend', (e) => updateTouch(e, 'end'), { passive: false });
+    function isCanvasTouch(e) {
+        // Only process touches that originate from a canvas element.
+        // This prevents DOM overlay UI interactions from also triggering
+        // XR controller input (select events / hit tests).
+        const target = e.target;
+        return target && target.tagName === 'CANVAS';
+    }
+
+    window.addEventListener('touchstart', (e) => { if (isCanvasTouch(e)) updateTouch(e, 'start'); }, { passive: false });
+    window.addEventListener('touchmove', (e) => { if (isCanvasTouch(e)) updateTouch(e, 'move'); }, { passive: false });
+    window.addEventListener('touchend', (e) => {
+        if (isCanvasTouch(e)) {
+            updateTouch(e, 'end');
+        } else if (touchState.active) {
+            // If a touch started on canvas but ended on overlay, still clean up
+            updateTouch(e, 'end');
+        }
+    }, { passive: false });
 
     // --- Driver Loop ---
     let camPos = { x: 0, y: 0, z: 0 };
