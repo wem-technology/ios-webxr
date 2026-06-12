@@ -25,7 +25,6 @@ struct WebXRApp: App {
            let toValue = queryItems.first(where: { $0.name == "to" })?.value,
            let targetURL = URL(string: toValue) {
             
-            print("App Clip Invoked. Target: \(targetURL)")
             self.deepLinkURL = targetURL
         }
     }

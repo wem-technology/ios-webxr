@@ -121,7 +121,6 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
         isCameraAccessRequested = false
         arView?.session.pause()
         self.onSessionActiveChanged?(false)
-        print("AR Session stopped.")
         if notifyJS {
             webView?.reload()
         }

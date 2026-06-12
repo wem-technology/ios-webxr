@@ -18,7 +18,8 @@ let package = Package(
             name: "WebXRKit",
             dependencies: [],
             resources: [
-                .process("Resources/webxr-polyfill.js")
+                .process("Resources/webxr-polyfill.js"),
+                .process("Resources/geolocation-shim.js")
             ]
         )
     ]

@@ -28,9 +28,6 @@ class GeolocationHandler: NSObject, WKScriptMessageHandler {
             let action = body["action"] as? String
         else { return }
 
-        print("[Geolocation] received action:", action,
-            "status:", locationManager.authorizationStatus.rawValue)
-
         switch action {
         case "getCurrentPosition":
             guard let requestId = body["requestId"] as? String else { return }

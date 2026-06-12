@@ -99,17 +99,15 @@ private struct _ARWebViewRepresentable: UIViewRepresentable {
                 """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(errorScript)
 
-        if let url = resourceBundle.url(forResource: "webxr-polyfill", withExtension: "js"),
-            let polyfillSource = try? String(contentsOf: url)
-        {
-            let userScript = WKUserScript(
-                source: polyfillSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-            contentController.addUserScript(userScript)
+        for scriptName in ["webxr-polyfill", "geolocation-shim"] {
+            if let url = resourceBundle.url(forResource: scriptName, withExtension: "js"),
+                let source = try? String(contentsOf: url)
+            {
+                let userScript = WKUserScript(
+                    source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+                contentController.addUserScript(userScript)
+            }
         }
-
-        let shimScript = WKUserScript(
-            source: GeolocationShim.source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        contentController.addUserScript(shimScript)
 
         let webView = WKWebView(frame: .zero, configuration: webConfig)
         if #available(iOS 16.4, *) { webView.isInspectable = true }
