@@ -6,7 +6,7 @@ struct ContentView: View {
 
     private static let startURL: String = {
         return Bundle.main.object(forInfoDictionaryKey: "WB_START_URL") as? String
-            ?? "https://helloxr.app"
+            ?? "https://mescape-dev.wemtechnology.xyz/game"
     }()
 
     @State private var urlString: String = ContentView.startURL

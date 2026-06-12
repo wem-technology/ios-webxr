@@ -49,6 +49,7 @@ targets:
         UILaunchScreen: {}
         UIRequiredDeviceCapabilities: [arm64, arkit]
         NSCameraUsageDescription: "Camera access is required for AR experiences."
+        NSLocationWhenInUseUsageDescription: "Location access is required for AR experiences that use your position."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
 
     entitlements:
@@ -93,6 +94,7 @@ targets:
         UILaunchScreen: {}
         UIRequiredDeviceCapabilities: [arm64, arkit]
         NSCameraUsageDescription: "Camera access is required for AR experiences."
+        NSLocationWhenInUseUsageDescription: "Location access is required for AR experiences that use your position."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
 
     entitlements:

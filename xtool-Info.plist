@@ -32,6 +32,8 @@
 	<string>16.0</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required for AR experiences.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Location access is required for AR experiences that use your position.</string>
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>1</integer>

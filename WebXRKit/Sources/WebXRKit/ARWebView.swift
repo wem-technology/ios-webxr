@@ -84,6 +84,10 @@ private struct _ARWebViewRepresentable: UIViewRepresentable {
         contentController.add(context.coordinator, name: "stopAR")
         contentController.add(context.coordinator, name: "hitTest")
 
+        let geolocationHandler = GeolocationHandler()
+        contentController.add(geolocationHandler, name: "geolocation")
+        context.coordinator.geolocationHandler = geolocationHandler
+
         let errorScript = WKUserScript(
             source: """
                     window.onerror = function(message, source, lineno, colno, error) {
@@ -102,6 +106,10 @@ private struct _ARWebViewRepresentable: UIViewRepresentable {
                 source: polyfillSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
             contentController.addUserScript(userScript)
         }
+
+        let shimScript = WKUserScript(
+            source: GeolocationShim.source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        contentController.addUserScript(shimScript)
 
         let webView = WKWebView(frame: .zero, configuration: webConfig)
         if #available(iOS 16.4, *) { webView.isInspectable = true }
@@ -130,6 +138,7 @@ private struct _ARWebViewRepresentable: UIViewRepresentable {
 
         context.coordinator.webView = webView
         context.coordinator.arView = arView
+        context.coordinator.geolocationHandler?.webView = webView
         webView.navigationDelegate = context.coordinator
         arView.session.delegate = context.coordinator
 

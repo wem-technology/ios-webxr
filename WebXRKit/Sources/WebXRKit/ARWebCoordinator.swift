@@ -9,6 +9,7 @@ public class ARWebCoordinator: NSObject, WKNavigationDelegate, ARSessionDelegate
 {
     weak var webView: WKWebView?
     weak var arView: ARSCNView?
+    var geolocationHandler: GeolocationHandler?
     var dataCallbackName: String?
     var isSessionRunning = false
 
