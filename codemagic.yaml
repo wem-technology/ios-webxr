@@ -17,7 +17,7 @@ workflows:
         DOMAIN_URL: "helloxr.app"
         START_URL: "https://helloxr.app"
         VERSION: "1.4.0"
-        XCODE_SCHEME: "HelloXR" 
+        XCODE_SCHEME: "WebXRApp" 
       xcode: latest
       cocoapods: default
 
