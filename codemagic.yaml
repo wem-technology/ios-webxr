@@ -16,8 +16,8 @@ workflows:
         BUNDLE_ID: "com.wemtechnology.helloxr"
         DOMAIN_URL: "helloxr.app"
         START_URL: "https://helloxr.app"
-        VERSION: "1.3.0"
-        XCODE_SCHEME: "WebXRApp" 
+        VERSION: "1.4.0"
+        XCODE_SCHEME: "HelloXR" 
       xcode: latest
       cocoapods: default
 
